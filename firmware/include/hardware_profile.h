@@ -12,6 +12,10 @@ constexpr uint8_t INA219_I2C_ADDRESS = 0x40;
 constexpr int DHT11_PIN = 27;
 constexpr int VOLTAGE_ADC_PIN = 34;
 constexpr int SERVO_PWM_PIN = 25;
+constexpr int HC_SR04_TRIGGER_PIN = 26;
+constexpr int HC_SR04_ECHO_PIN = 35;
+// HC-SR04 Echo is 5 V. Keep false until the 8.2 kOhm / 10 kOhm divider is verified.
+constexpr bool HC_SR04_ECHO_PROTECTION_REVIEWED = false;
 // Use these exact resistors: 30 kOhm from VIN to GPIO34, 7.5 kOhm from GPIO34 to GND.
 // This 5:1 divider is only safe for an input at or below 16.5 V.
 constexpr float VOLTAGE_DIVIDER_R1_OHMS = 30000.0F;
