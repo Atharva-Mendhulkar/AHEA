@@ -20,7 +20,7 @@ The generated and measured waveform shares the ESP32-S3 timebase and is not an i
 
 ## Optional profiles
 
-- HC-SR04: place 8.2 kΩ from Echo to the input node and 10 kΩ from that node to ground, then review the resulting level before enabling the profile.
+- HC-SR04: D26/GPIO26 → Trig. Echo → 8.2 kΩ → D35/GPIO35, with 10 kΩ from D35 to GND. Power VCC from 5 V and share GND. Never connect the 5 V Echo output directly to D35; review the divider output with a meter before enabling the profile.
 - MPU6050: verify that SDA and SCL pull-ups terminate at 3.3 V regardless of breakout-board regulator claims.
 - DHT11: verify a 3.3 V data pull-up or use reviewed level shifting; never expose the GPIO to a 5 V pull-up.
 
