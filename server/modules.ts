@@ -73,11 +73,30 @@ export function registryMatchesReviewedPlans(context: ProjectContext, registry: 
   });
 }
 
+const operatorActions: Record<string, { prompt: string; confirmationLabel: string }> = {
+  "loopback.observe-destination.1khz.v1": { prompt: "Confirm the protected loopback fixture is powered, with the hidden jumper state left unchanged.", confirmationLabel: "Fixture confirmed — capture destination" },
+  "loopback.observe-source.1khz.v1": { prompt: "Leave the loopback wiring unchanged while the source node is checked.", confirmationLabel: "Wiring unchanged — capture source" },
+  "loopback.compare-endpoints.1khz.v1": { prompt: "Leave the loopback wiring unchanged for a synchronized source and destination capture.", confirmationLabel: "Fixture ready — compare endpoints" },
+  "loopback.measure-timing.1khz.v1": { prompt: "Leave the loopback wiring unchanged while timing and duty cycle are measured.", confirmationLabel: "Fixture ready — capture timing" },
+  "loopback.inspect-stimulus.static.v1": { prompt: "Leave the fixture untouched while the registered low-high-low stimulus sequence is checked.", confirmationLabel: "Fixture ready — inspect stimulus" },
+  "loopback.repeat-synchronized.500hz.v1": { prompt: "Do not change the fixture; prepare for a repeat synchronized capture at the registered alternate frequency.", confirmationLabel: "Fixture unchanged — repeat capture" },
+  "loopback.verify-path.1khz.v1": { prompt: "After the declared intervention, restore power and confirm the protected fixture is ready for a fresh verification run.", confirmationLabel: "Post-change fixture ready — verify" },
+  "hc-sr04.echo-timing.v1": { prompt: "Place a flat obstacle squarely in front of the HC-SR04 within the declared distance range and hold it still.", confirmationLabel: "Obstacle positioned — capture echo" },
+  "hc-sr04.variance.v1": { prompt: "Keep the obstacle fixed at the same distance and alignment for the complete repeated-reading window.", confirmationLabel: "Obstacle held still — capture variance" },
+  "hc-sr04.progression.v1": { prompt: "Move the obstacle steadily away from the sensor through the declared path while the capture runs.", confirmationLabel: "Ready to move obstacle — capture progression" },
+  "mpu6050.identity.v1": { prompt: "Keep the MPU6050 connected and motionless while its registered identity is read.", confirmationLabel: "Sensor connected — read identity" },
+  "mpu6050.stationary.v1": { prompt: "Place the MPU6050 flat on a stable surface and do not touch it during the baseline window.", confirmationLabel: "Sensor is still — capture baseline" },
+  "mpu6050.motion-axis.v1": { prompt: "Move the MPU6050 deliberately along its labeled +X direction, then return it toward its starting position during capture.", confirmationLabel: "Ready to move sensor — capture motion" },
+  "dht11.response.v1": { prompt: "Keep the DHT11 powered in stable air and wait at least two seconds since the previous reading.", confirmationLabel: "Sensor ready — capture response" },
+  "dht11.environment.v1": { prompt: "Place the DHT11 in the environment being characterized and allow its reading to settle.", confirmationLabel: "Environment stable — capture reading" },
+  "dht11.valid-rate.v1": { prompt: "Keep the DHT11 placement and airflow unchanged during the three-reading consistency window.", confirmationLabel: "Conditions stable — capture consistency" },
+};
+
 function buildExperiment(session: DiagnosisSession, planId: string): ExperimentDefinition {
   const registered = session.hardware.registry.plans.find((entry) => entry.id === planId);
   if (!registered) throw new Error(`Registered plan ${planId} is unavailable.`);
   const ordinal = session.observations.filter((entry) => entry.phase === session.phase).length + 1;
-  return { id: `${registered.type}:${ordinal}`, type: registered.type, label: registered.label, description: registered.description, targetId: session.targetId, planId, command: registered.command, phase: session.phase, requiresSetupConfirmation: registered.requiresSetupConfirmation, budgetClass: registered.budgetClass, evidenceReferences: session.evidence.assessments.map((entry) => entry.observationId) };
+  return { id: `${registered.type}:${ordinal}`, type: registered.type, label: registered.label, description: registered.description, targetId: session.targetId, planId, command: registered.command, phase: session.phase, requiresSetupConfirmation: registered.requiresSetupConfirmation, budgetClass: registered.budgetClass, evidenceReferences: session.evidence.assessments.map((entry) => entry.observationId), operatorPrompt: operatorActions[planId]?.prompt, confirmationLabel: operatorActions[planId]?.confirmationLabel };
 }
 function localExperiment(session: DiagnosisSession, type: "request_intervention" | "conclude_normal" | "conclude_inconclusive"): ExperimentDefinition {
   const recommendation = session.evidence.recommendations[0];

@@ -27,6 +27,8 @@ npm run dev
 
 Open `http://localhost:3000`. Simulation is the default and never produces physical `CONFIRMED` status. An OpenAI key is optional; without one, the deterministic selector chooses from the same eligible experiment set.
 
+Optional-profile simulations are operator-guided. Before each capture, the dashboard asks for the applicable stimulus—for example, holding or moving the MPU6050, positioning an HC-SR04 obstacle, or stabilizing the DHT11 environment—then advances the registered simulated capture after a visible countdown. The sequence can be paused, and it remains explicit that the fixture is scripted rather than sensing real-world motion. Physical experiments still require explicit setup confirmation. Deterministic multi-channel traces then animate in the graph and remain labeled as simulated evidence.
+
 ## Commands
 
 | Command | Purpose |

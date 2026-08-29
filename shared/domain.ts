@@ -73,6 +73,7 @@ export interface CapabilityRegistry { schemaVersion: 1; registryVersion: string;
 export interface ExperimentDefinition {
   id: string; type: ExperimentType; label: string; description: string; targetId: string; planId?: string; command?: HardwareCommand;
   phase: ExperimentPhase; requiresSetupConfirmation: boolean; budgetClass: BudgetClass; evidenceReferences: string[]; recommendationId?: string;
+  operatorPrompt?: string; confirmationLabel?: string;
 }
 
 export type MeasurementValue = number | boolean | string;

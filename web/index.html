@@ -48,19 +48,30 @@
               <div><span>Selected plan</span><strong id="selected-plan">—</strong></div><div><span>Evidence state</span><strong id="evidence-state">—</strong></div><div><span>Confidence</span><strong id="confidence-inline">UNKNOWN</strong></div><div><span>Experiments</span><strong id="experiment-count">0</strong></div><div><span>Verification</span><strong id="verification-count">0 / 2</strong></div><div><span>Registry</span><strong id="registry-digest">—</strong></div>
             </div>
 
-            <div class="diagnostic-grid">
-              <div class="graph-region"><div class="state-graph"><div class="graph-labels"><span>Latest observed nodes</span><span id="graph-mode">Waiting</span></div><canvas id="state-graph" aria-label="Source and destination waveform"></canvas><div id="graph-empty" class="graph-empty">Run a registered experiment to view its trace</div></div><div id="graph-legend" class="graph-legend"><span><i class="legend-line"></i>Destination</span></div></div>
+            <div class="diagnostic-workspace">
+              <section class="graph-region diagnostic-panel" aria-labelledby="waveform-heading">
+                <div class="section-heading"><p id="waveform-heading" class="eyebrow">Live waveform</p><span id="graph-mode">Waiting</span></div>
+                <div class="state-graph"><canvas id="state-graph" aria-label="Latest observed sensor or waveform channels"></canvas><div id="graph-empty" class="graph-empty">Run a registered experiment to view its trace</div></div>
+                <div id="graph-legend" class="graph-legend"><span><i class="legend-line"></i>Destination</span></div>
+                <div id="live-measurements" class="live-measurements"><p class="empty-copy">Live measurements will appear after the first capture.</p></div>
+              </section>
+
               <section id="analysis-view" class="analysis-view">
-                <div class="analysis-columns"><div><p class="eyebrow">OBSERVED</p><div id="observed" class="statement-list"></div></div><div><p class="eyebrow">INFERENCE</p><div id="inference" class="statement-list"></div></div></div>
-                <div class="analysis-columns"><div><p class="eyebrow">Hypotheses</p><div id="hypotheses" class="hypothesis-list"></div></div><div><p class="eyebrow">VERIFICATION</p><div id="verification" class="statement-list"></div></div></div>
+                <section class="diagnostic-panel evidence-panel"><p class="eyebrow">OBSERVED</p><div id="observed" class="statement-list"></div></section>
+                <section class="diagnostic-panel evidence-panel"><p class="eyebrow">INFERENCE</p><div id="inference" class="statement-list"></div></section>
+                <section class="diagnostic-panel verification-panel"><p class="eyebrow">VERIFICATION</p><div id="verification"></div></section>
               </section>
             </div>
 
-            <section id="recommendation" class="recommendation-stack"></section>
+            <section class="diagnostic-panel hypotheses-panel"><div class="section-heading"><p class="eyebrow">Hypotheses</p><span>Evidence-ranked, not probabilistic</span></div><div id="hypotheses" class="hypothesis-grid"></div></section>
+
+            <section id="recommendation-region" class="recommendation-region">
+              <section id="recommendation" class="recommendation-stack"></section>
+              <div id="intervention-action" class="intervention-action hidden"><label class="field">Human intervention<input id="intervention" value="Powered down and restored the removable jumper"></label><label class="check-label"><input id="safety-confirmed" type="checkbox"> I powered down and followed the safety constraints</label><button id="declare" class="button button-primary" type="button">Declare change and verify</button></div>
+            </section>
             <footer class="agent-actions">
               <button id="start-investigation" class="button button-primary" type="button">Start investigation</button>
-              <div id="execute-action" class="action-cluster hidden"><label class="check-label"><input id="setup-confirmed" type="checkbox"> Fixture matches the declared setup</label><button id="execute" class="button button-primary" type="button">Run selected experiment</button></div>
-              <div id="intervention-action" class="intervention-action hidden"><label class="field">Human intervention<input id="intervention" value="Powered down and restored the removable jumper"></label><label class="check-label"><input id="safety-confirmed" type="checkbox"> I powered down and followed the safety constraints</label><button id="declare" class="button button-primary" type="button">Declare change and verify</button></div>
+              <div id="execute-action" class="action-cluster hidden"><div class="operator-prompt"><div class="operator-prompt-heading"><p class="eyebrow">Operator action</p><span id="auto-run-status" class="auto-run-status hidden" role="status">Automatic capture</span></div><strong id="operator-prompt">Confirm the declared setup before capture.</strong><small id="simulation-prompt-note">This advances a scripted simulation fixture; no physical motion is sensed.</small></div><div id="physical-execution-controls" class="physical-execution-controls"><label class="check-label"><input id="setup-confirmed" type="checkbox"> <span id="confirmation-label">Fixture matches the declared setup</span></label><button id="execute" class="button button-primary" type="button">Action complete — capture data</button></div><button id="auto-run-toggle" class="button button-secondary auto-run-toggle hidden" type="button">Pause automation</button></div>
               <button id="download-report" class="button button-ghost" type="button">Download evidence report</button>
             </footer>
           </section>
@@ -68,7 +79,7 @@
           <aside class="session-sidebar">
             <section class="card compact-card"><div class="card-header"><div><p class="eyebrow">Project context</p><h2 id="context-title">—</h2></div></div><div id="context-facts" class="compact-facts"></div></section>
             <section class="card compact-card"><div class="card-header"><div><p class="eyebrow">Capability registry</p><h2 id="hardware-title">—</h2></div><span id="hardware-health" class="status-dot"></span></div><div id="hardware-facts" class="compact-facts"></div><div id="plan-list" class="plan-list"></div></section>
-            <details class="card compact-card timeline-card" open><summary><span><span class="eyebrow">Audit trail</span><strong>Session events</strong></span><span id="event-count" class="badge">0</span></summary><div id="timeline" class="timeline"></div></details>
+            <details class="card compact-card timeline-card"><summary><span><span class="eyebrow">Audit trail</span><strong>Session events</strong></span><span id="event-count" class="badge">0</span></summary><div id="timeline" class="timeline"></div></details>
           </aside>
         </div>
       </section>

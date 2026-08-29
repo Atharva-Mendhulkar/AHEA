@@ -232,7 +232,9 @@ Simulation may exercise the entire logical path and report a simulated verificat
 
 ## Dashboard behavior
 
-The dashboard is one state-aware investigation surface. It shows project/profile identity, mode, connected firmware/capability status, current lifecycle state, active registered experiment, required human action, measurements, evidence, eligible/selected experiment history, verification count, and append-only timeline.
+The dashboard is one state-aware investigation surface. It shows project/profile identity, mode, connected firmware/capability status, current lifecycle state, active registered experiment, required human action, measurements, evidence, eligible/selected experiment history, verification count, and append-only timeline. In simulation, plan-specific operator prompts remain visible for a short countdown before the registered scripted capture advances automatically; the sequence can be paused and never claims to sense real-world action. Physical execution always requires explicit setup confirmation.
+
+The graph renders the latest registered time series dynamically, supports multiple channels with separate labels and units, and identifies the source mode and plan. Sensor simulations provide deterministic traces for distance progression and stability, stationary and directed-axis motion, protocol timing, and environmental readings.
 
 Results are grouped and labeled as `OBSERVED`, `INFERENCE`, `RECOMMENDATION`, and `VERIFICATION`. Claims link to supporting observation IDs and show limitations. Confidence uses only `UNKNOWN`, `POSSIBLE`, `LIKELY`, or `HIGH_CONFIDENCE`; no hypothesis percentages or probability-like graphics appear.
 

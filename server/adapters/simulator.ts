@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ExperimentDefinition, HardwareStatus, Measurement, Observation, ProjectContext, SimulationFixture } from "../../shared/domain.js";
+import type { ExperimentDefinition, HardwareStatus, Measurement, MeasurementSeries, Observation, ProjectContext, SimulationFixture } from "../../shared/domain.js";
 import { targetById } from "../../shared/domain.js";
 import { registryForContext } from "../modules.js";
 import type { ExecuteContext, HardwareAdapter } from "./adapter.js";
@@ -32,17 +32,54 @@ export class SimulatorAdapter implements HardwareAdapter {
     this.sequence += 1;
     if (experiment.command === "abort") this.estopLatched = true;
     const measurements = target.type === "loopback" ? this.loopbackMeasurements(experiment.planId, target.id) : this.sensorMeasurements(target.type, experiment.planId, target.id);
+    const series = target.type === "loopback" ? this.loopbackSeries(experiment.planId, target.id, measurements) : this.sensorSeries(target.type, experiment.planId, target.id);
     const invalid = measurements.some((entry) => entry.quality === "invalid");
     const ended = Math.max(started + registered.durationMs, Date.now() - this.startedAt);
-    const binary = measurements.find((entry) => entry.channel === "destination_present")?.value === true;
     return {
       id: randomUUID(), sessionId: execution.sessionId, experimentId: experiment.id, targetId: target.id, targetType: target.type, source: "simulation", adapter: "simulator", command: experiment.command, planId: experiment.planId, phase: execution.phase, capturedAt: new Date().toISOString(), monotonicStartedMs: started, monotonicEndedMs: ended, sequenceNumber: this.sequence,
       measurements,
-      series: target.type === "loopback" ? [{ channel: "destination_level", unit: "logic", targetId: target.id, sampleIntervalUs: 250, values: Array.from({ length: 32 }, (_, index) => binary && index % 2 === 0 ? 1 : 0) }] : [],
+      series,
       targetHealth: [{ targetId: target.id, healthy: !invalid, errorRate: invalid ? 1 : 0, detail: invalid ? "Simulated profile fault." : undefined }],
       operation: { accepted: !invalid, aborted: experiment.command === "abort", timedOut: false, estopLatched: this.estopLatched, cleanupSucceeded: true, reasons: invalid ? ["SIMULATED_PROFILE_FAULT"] : [] },
       projectContextDigest: execution.projectContextDigest, registryDigest: this.status.registry.digest, firmwareVersion: this.status.firmwareVersion, boardIdentity: this.status.boardIdentity, hardwareProfileId: this.status.profileId, bindingIds: registered.bindingIds, setupDeclaration: execution.setupDeclaration, gatewayValidation: execution.gatewayValidation, limitations: ["Simulated observation; no physical claim is supported.", ...registered.limitations],
     };
+  }
+
+  private loopbackSeries(planId: string, targetId: string, measurements: Measurement[]): MeasurementSeries[] {
+    const present = (channel: string) => measurements.find((entry) => entry.channel === channel)?.value === true;
+    if (planId.includes("static")) {
+      const values = [0, 0, 1, 1, 0, 0];
+      return ["source", "destination"].map((node) => ({ channel: `${node}_level`, unit: "logic", targetId, sampleIntervalUs: 100000, values: present(`${node}_static_sequence_valid`) ? values : values.map(() => 0) }));
+    }
+    const period = planId.includes("500hz") ? 16 : 8;
+    const waveform = (isPresent: boolean, dutyPercent: number) => Array.from({ length: 64 }, (_, index) => isPresent && index % period < Math.round(period * dutyPercent / 100) ? 1 : 0);
+    const result: MeasurementSeries[] = [];
+    const source = measurements.find((entry) => entry.channel === "source_duty_percent")?.value;
+    const destination = measurements.find((entry) => entry.channel === "destination_duty_percent")?.value;
+    if (typeof source === "number") result.push({ channel: "source_level", unit: "logic", targetId, sampleIntervalUs: 125, values: waveform(present("source_present"), source) });
+    if (typeof destination === "number") result.push({ channel: "destination_level", unit: "logic", targetId, sampleIntervalUs: 125, values: waveform(present("destination_present"), destination) });
+    return result;
+  }
+
+  private sensorSeries(kind: Exclude<ProjectContext["profile"]["kind"], "loopback">, planId: string, targetId: string): MeasurementSeries[] {
+    const fault = this.fixture === "sensor_fault";
+    const make = (channel: string, unit: string, sampleIntervalUs: number, values: number[]): MeasurementSeries => ({ channel, unit, targetId, sampleIntervalUs, values: fault ? values.map(() => 0) : values });
+    if (kind === "hc_sr04") {
+      if (planId.includes("progression")) return [make("distance_cm", "cm", 60000, [18, 21, 24, 28, 32, 37, 42, 48, 54, 61, 68, 76])];
+      return [make("distance_cm", "cm", 60000, [24.6, 24.9, 24.7, 25.1, 24.8, 24.7, 25, 24.8, 24.9, 24.7, 24.8, 24.9].slice(0, planId.includes("echo-timing") ? 8 : 12))];
+    }
+    if (kind === "mpu6050") {
+      if (planId.includes("identity")) return [make("i2c_response", "logic", 20000, [0, 1, 1, 0])];
+      if (planId.includes("stationary")) return [make("acceleration_magnitude", "g", 20000, [1.002, .997, 1.008, 1.001, .994, 1.004, 1.006, .999, 1.003, .996, 1.001, 1.005])];
+      return [
+        make("accel_x", "g", 20000, [0, .08, .24, .58, 1.12, .7, .25, .04, -.18, -.42, -.2, 0]),
+        make("accel_y", "g", 20000, [.02, .01, .04, .03, .06, .04, .02, .01, -.01, -.03, 0, .01]),
+        make("accel_z", "g", 20000, [1, 1.01, .98, .96, .9, .95, .99, 1.01, 1, .98, 1, 1.01]),
+      ];
+    }
+    if (planId.includes("response")) return [make("data_line", "logic", 40, [1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0])];
+    if (planId.includes("valid-rate")) return [make("valid_frame", "logic", 2000000, [1, 1, 1])];
+    return [make("temperature", "C", 2000000, [27.1, 27.2, 27.2, 27.3]), make("humidity", "%", 2000000, [54, 54, 55, 54])];
   }
 
   private loopbackMeasurements(planId: string, targetId: string): Measurement[] {

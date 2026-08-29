@@ -14,7 +14,7 @@ function normalizedContext({ session, eligibleExperiments }: DecisionContext) {
     project: session.projectContext.project, profile: session.projectContext.profile, evidence: session.evidence,
     capabilityRegistryDigest: session.hardware.registry.digest,
     budget: { executed: session.experimentsExecuted, maximum: session.projectContext.constraints.maximumExperiments },
-    eligibleExperiments: eligibleExperiments.map(({ id, type, label, description, planId, targetId, evidenceReferences }) => ({ id, type, label, description, planId, targetId, evidenceReferences })),
+    eligibleExperiments: eligibleExperiments.map(({ id, type, label, description, planId, targetId, evidenceReferences, operatorPrompt }) => ({ id, type, label, description, planId, targetId, evidenceReferences, operatorPrompt })),
   };
 }
 function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
