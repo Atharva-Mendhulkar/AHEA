@@ -1,0 +1,65 @@
+:root {
+  color-scheme: dark;
+  --ink: #f6f7f2;
+  --muted: #9fa9a5;
+  --panel: #141a19;
+  --line: #2b3532;
+  --accent: #b7ff4a;
+  --cyan: #54e7d4;
+  --danger: #ff655f;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 80% -10%, #234538 0, #0b0f0e 38rem);
+  color: var(--ink);
+  font: 15px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+header, main { width: min(1180px, calc(100% - 32px)); margin: auto; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 34px 0 22px; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { margin-bottom: 0; font-size: clamp(30px, 5vw, 52px); letter-spacing: -0.05em; }
+h2 { margin-bottom: 8px; }
+h3 { color: var(--muted); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+.eyebrow { margin-bottom: 8px; color: var(--accent); font: 700 11px/1.2 ui-monospace, monospace; letter-spacing: .14em; }
+.mode { padding: 9px 14px; border: 1px solid var(--line); border-radius: 999px; font: 700 12px ui-monospace, monospace; }
+.header-badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.mode.physical { border-color: var(--accent); color: var(--accent); }
+.mode.simulation { border-color: #f4bf4f; color: #f4bf4f; }
+.card { background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--line); border-radius: 16px; padding: 22px; box-shadow: 0 20px 70px #0005; }
+.setup { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)) auto auto; align-items: end; gap: 12px; }
+label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
+select, textarea, button { width: 100%; border: 1px solid var(--line); border-radius: 9px; background: #0d1211; color: var(--ink); padding: 11px 12px; font: inherit; }
+textarea { min-height: 92px; resize: vertical; }
+button { width: auto; cursor: pointer; background: var(--accent); color: #10150f; border: 0; font-weight: 800; }
+button:disabled { cursor: not-allowed; opacity: .35; }
+button.danger { background: var(--danger); color: white; }
+.status-card { display: flex; justify-content: space-between; align-items: center; margin: 16px 0; }
+.confidence { text-align: right; }
+.confidence span { display: block; color: var(--muted); font-size: 12px; }
+.confidence strong { color: var(--cyan); font: 800 18px ui-monospace, monospace; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding-bottom: 60px; }
+.wide { grid-column: 1 / -1; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.pending { margin-top: 16px; padding: 14px; border: 1px solid #52623d; border-radius: 10px; background: #1a2416; }
+.decision-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 28px; }
+.lead { color: var(--cyan); font: 700 18px/1.4 ui-monospace, monospace; }
+.empty { color: var(--muted); }
+.cal-row { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 8px 0; }
+.evidence-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+.evidence-item { padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.evidence-item strong { display: block; color: var(--cyan); font: 800 21px ui-monospace, monospace; }
+.evidence-item small { display: block; color: var(--muted); }
+.timeline { margin: 0; padding-left: 22px; }
+.timeline li { padding: 8px 4px 12px 10px; border-left: 1px solid var(--line); }
+.tag { display: inline-block; margin-right: 7px; padding: 2px 6px; border-radius: 4px; background: #26312e; color: var(--accent); font: 700 10px ui-monospace, monospace; }
+#toast { position: fixed; right: 20px; bottom: 20px; max-width: 420px; padding: 12px 16px; border-radius: 9px; background: var(--danger); color: white; opacity: 0; pointer-events: none; transition: opacity .2s; }
+#toast.show { opacity: 1; }
+@media (max-width: 760px) {
+  .setup, .grid, .decision-grid { grid-template-columns: 1fr; }
+  .wide { grid-column: auto; }
+  .status-card { align-items: flex-start; gap: 20px; }
+  header { align-items: flex-start; gap: 16px; }
+}

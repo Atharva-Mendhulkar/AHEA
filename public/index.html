@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hardware Agent</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">PHYSICAL EVIDENCE · BOUNDED EXPERIMENTS</p>
+        <h1>Hardware Agent</h1>
+      </div>
+      <div class="header-badges">
+        <div id="agentBadge" class="mode simulation">AGENT NOT CONNECTED</div>
+        <div id="modeBadge" class="mode simulation">NO SESSION</div>
+      </div>
+    </header>
+
+    <main>
+      <section class="setup card">
+        <div>
+          <label for="mode">Adapter mode</label>
+          <select id="mode">
+            <option value="simulation">Simulation</option>
+            <option value="physical">Physical ESP32-S3</option>
+          </select>
+        </div>
+        <div id="fixtureGroup">
+          <label for="fixture">Fixture</label>
+          <select id="fixture">
+            <option value="disconnected">Disconnected motor</option>
+            <option value="healthy">Healthy motor</option>
+            <option value="stalled">Stalled motor</option>
+            <option value="sensor_failure">Sensor failure</option>
+          </select>
+        </div>
+        <div id="portGroup" hidden>
+          <label for="port">Serial port</label>
+          <select id="port"></select>
+        </div>
+        <button id="connect">Create session</button>
+        <button id="estop" class="danger" disabled>Emergency stop</button>
+      </section>
+
+      <section id="statusCard" class="card status-card">
+        <div>
+          <p class="eyebrow">SESSION STATUS</p>
+          <h2 id="phase">Not connected</h2>
+          <p id="status">Choose an adapter mode to begin.</p>
+        </div>
+        <div class="confidence">
+          <span>Backend confidence</span>
+          <strong id="confidence">UNKNOWN</strong>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <p class="eyebrow">PROJECT CONTEXT</p>
+          <h2>DC motor diagnostic</h2>
+          <label for="problem">Reported problem</label>
+          <textarea id="problem">The motor is supposed to run, but nothing is moving. Diagnose it.</textarea>
+          <div class="actions">
+            <button id="calibrate" disabled>Start healthy calibration</button>
+            <button id="diagnose" disabled>Start diagnosis</button>
+            <button id="repair" disabled>Motor lead reconnected</button>
+          </div>
+          <div id="pending" class="pending" hidden></div>
+        </article>
+
+        <article class="card">
+          <p class="eyebrow">CALIBRATION</p>
+          <div id="calibration" class="empty">No healthy baseline captured.</div>
+        </article>
+
+        <article class="card wide">
+          <p class="eyebrow">CURRENT OBSERVATION → AGENT DECISION</p>
+          <div class="decision-grid">
+            <div>
+              <h3>Possible causes</h3>
+              <ul id="hypotheses"></ul>
+            </div>
+            <div>
+              <h3>Agent's next action</h3>
+              <p id="nextAction" class="lead">Waiting for evidence.</p>
+              <h3>Why</h3>
+              <p id="rationale">No decision recorded.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="card wide">
+          <p class="eyebrow">EVIDENCE WITH PROVENANCE</p>
+          <div id="evidence" class="evidence-list empty">No measurements yet.</div>
+        </article>
+
+        <article class="card wide">
+          <p class="eyebrow">AUDIT TIMELINE</p>
+          <ol id="timeline" class="timeline"></ol>
+        </article>
+
+        <article id="reportCard" class="card wide" hidden>
+          <p class="eyebrow">FINAL DIAGNOSIS REPORT</p>
+          <div id="report"></div>
+        </article>
+      </section>
+    </main>
+
+    <div id="toast" role="alert"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
