@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="AHEA pin-accurate physical circuit assembly workbench">
+    <link rel="icon" href="/logo.svg" type="image/svg+xml">
+    <script>const initialTheme = localStorage.getItem("ahea-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); document.documentElement.dataset.theme = initialTheme; document.documentElement.classList.toggle("dark", initialTheme === "dark");</script>
+    <title>AHEA — Circuit Setup</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="circuit-page">
+    <header class="app-bar">
+      <a class="brand" href="/" aria-label="Return to AHEA home"><img class="brand-logo" src="/logo.svg" alt=""><span>AHEA</span></a>
+      <div class="breadcrumb"><span>Workbench</span><span>/</span><strong>Circuit setup</strong></div>
+      <div class="app-actions"><span class="badge" data-tone="info">Simulation</span><span class="badge" data-tone="success">Connected</span><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch theme" title="Switch theme"><svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path></svg></button><button id="estop" class="button button-danger button-compact" type="button" disabled>Stop</button></div>
+    </header>
+
+    <main class="shell circuit-shell">
+      <header class="circuit-page-header">
+        <div><p class="eyebrow">Active workspace</p><h1>Circuit setup</h1><p class="page-summary">Build and verify the physical diagnostic circuit before starting the investigation.</p></div>
+        <div class="circuit-state-stack"><span id="assembly-state" class="state-pill" data-state="assembling">Assembling</span><span id="validation-summary" class="validation-summary">Validating topology…</span></div>
+      </header>
+
+      <section class="circuit-workbench">
+        <section class="card circuit-card" aria-labelledby="circuit-title">
+          <header class="circuit-card-header">
+            <div><p id="active-kicker" class="eyebrow">01 / Base</p><h2 id="circuit-title">ESP32 + breadboard</h2></div>
+            <div class="view-toolbar" aria-label="Circuit camera views"><select id="camera-view" aria-label="Camera view"></select><button id="pin-inspection-toggle" class="button button-secondary button-compact" type="button" aria-pressed="false">Pin inspection</button></div>
+          </header>
+
+          <div id="circuit-stage" class="circuit-stage" data-phase="idle">
+            <svg id="circuit-svg" viewBox="0 0 1500 900" role="img" aria-labelledby="svg-title svg-description">
+              <title id="svg-title">Pin-accurate ESP32-S3 diagnostic breadboard circuit</title>
+              <desc id="svg-description">A regulated five volt load rail, common ground, two conditioned analog inputs, protected ultrasonic echo, I2C motion sensor, DHT11, and independently powered SG90 servo.</desc>
+              <defs>
+                <filter id="part-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".18"/></filter>
+                <marker id="wire-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0L6 3L0 6Z" fill="context-stroke"/></marker>
+              </defs>
+              <g id="breadboard-layer"></g><g id="wire-layer"></g><g id="component-layer"></g><g id="overlay-layer"></g>
+            </svg>
+            <div class="stage-key"><span><i class="key-power"></i>5 V power</span><span><i class="key-logic"></i>3.3 V / signal</span><span><i class="key-ground"></i>Ground</span><span><i class="key-active"></i>Active path</span></div>
+            <aside id="pin-inspector" class="pin-inspector" hidden>
+              <button id="close-inspector" type="button" aria-label="Close inspection">×</button><p class="eyebrow">Pin inspection</p><strong id="inspector-title">Select a pin</strong>
+              <p id="inspector-purpose">Select any visible component pin or a connection-table row to trace its complete electrical path.</p>
+              <dl><div><dt>Physical pin</dt><dd id="inspector-pin">—</dd></div><div><dt>Voltage</dt><dd id="inspector-voltage">—</dd></div><div><dt>Signal</dt><dd id="inspector-signal">—</dd></div><div><dt>Path</dt><dd id="inspector-path">—</dd></div></dl>
+            </aside>
+          </div>
+
+          <footer class="circuit-metrics"><div><span>Controller</span><strong>ESP32-S3 · 44 pins</strong></div><div><span>Logic</span><strong>3.3 V</strong></div><div><span>Load supply</span><strong>5 V / 3 A</strong></div><div><span>Graph checks</span><strong id="verification-count">0 / 0</strong></div></footer>
+          <div id="ready-banner" class="ready-banner" aria-live="polite"><span class="ready-check">✓</span><div><span>System assembled</span><strong>All required connections verified.</strong></div></div>
+        </section>
+
+        <aside class="card assembly-controls" aria-labelledby="sequence-title">
+          <div class="card-header"><div><p class="eyebrow">Hardware assembly</p><h2 id="sequence-title">Assembly sequence</h2></div><span id="sequence-badge" class="badge">0 / 6</span></div>
+          <ol id="assembly-timeline" class="assembly-timeline"></ol>
+          <div class="assembly-progress-block"><div><span id="step-label">Step 01 of 06</span><strong id="progress-label">0%</strong></div><div class="assembly-progress" role="progressbar" aria-label="Circuit assembly progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progress-bar"></span></div></div>
+          <div class="assembly-manual-controls"><button id="previous-step" class="button button-secondary" type="button" disabled>← Previous</button><button id="next-step" class="button button-secondary" type="button">Next step →</button></div>
+          <button id="auto-build" class="button button-primary button-wide" type="button">Build automatically</button>
+          <div class="assembly-utility-controls"><button id="restart-build" class="button button-ghost button-compact" type="button">Restart</button><button id="skip-build" class="button button-ghost button-compact" type="button">Skip to final</button></div>
+          <p id="sequence-note" class="sequence-note">Place the ESP32-S3 first, straddling the center trench with every header pin visible.</p>
+          <details class="safety-note"><summary>Electrical design notes</summary><ul><li>USB powers only the ESP32; its 5 V header is unused.</li><li>External 5 V enters through ACS712 IP+ / IP−.</li><li>HC-SR04 ECHO is divided by 2.2 kΩ / 3.3 kΩ.</li><li>Servo power is independent with 470 µF + 100 nF decoupling.</li></ul></details>
+        </aside>
+      </section>
+
+      <section class="card connection-table-card">
+        <header><div><p class="eyebrow">Netlist / physical endpoints</p><h2>Pin-level connection table</h2></div><div class="table-tools"><label>Filter<input id="connection-filter" type="search" placeholder="GPIO, component, voltage…"></label><span id="table-count" class="badge"></span></div></header>
+        <div class="connection-table-wrap"><table><thead><tr><th>Component</th><th>Physical pin</th><th>Pin function</th><th>Connects to</th><th>Voltage</th><th>Signal type</th></tr></thead><tbody id="connection-table"></tbody></table></div>
+      </section>
+      <footer class="circuit-attribution">Visual part references: Fritzing parts repository, pinned at <code>27535f2</code>, CC BY-SA 3.0. ESP32-S3 header labels follow Espressif DevKitC-1 v1.1 documentation.</footer>
+    </main>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/circuit-setup.js"></script>
+  </body>
+</html>

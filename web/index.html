@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="AHEA evidence-bounded hardware investigation agent">
+    <link rel="icon" href="/logo.svg" type="image/svg+xml">
     <script>const initialTheme = localStorage.getItem("ahea-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); document.documentElement.dataset.theme = initialTheme; document.documentElement.classList.toggle("dark", initialTheme === "dark");</script>
     <title>AHEA — Hardware Agent</title>
     <link rel="stylesheet" href="/styles.css">
@@ -17,7 +18,7 @@
 
     <main class="shell">
       <section id="setup" class="setup-layout">
-        <div class="setup-copy"><span class="section-index">AHEA / AGENT</span><p class="eyebrow">Project-context hardware debugger</p><h1>Describe the fault.<br>The agent runs the test.</h1><p class="lede">AHEA chooses bounded experiments, watches the physical response, stops when the evidence is sufficient, and explains what to change.</p><div class="principles"><span>Agent-directed</span><span>Physical evidence</span><span>Bounded changes</span></div></div>
+        <div class="setup-copy"><span class="section-index">AHEA / AGENT</span><p class="eyebrow">Project-context hardware debugger</p><h1>Describe the fault.<br>The agent runs the test.</h1><p class="lede">AHEA chooses bounded experiments, watches the physical response, stops when the evidence is sufficient, and explains what to change.</p><div class="principles"><span>Agent-directed</span><span>Physical evidence</span><span>Bounded changes</span></div><a class="button button-secondary setup-link" href="/circuit-setup">Setup circuit <span aria-hidden="true">→</span></a></div>
         <form id="start-form" class="card setup-card">
           <div class="card-header"><div><p class="eyebrow">New investigation</p><h2>Tell the agent what is wrong</h2></div><span class="agent-orb idle" aria-hidden="true"></span></div>
           <div class="field-row">

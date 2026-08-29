@@ -93,6 +93,9 @@ export function createApp(coordinator: Coordinator) {
   app.get("/api/project-context/default", (_request, response) => response.json(defaultProjectContext));
 
   app.use(express.static(path.resolve(here, "../web")));
+  app.get("/circuit-setup", (_request, response) => {
+    response.sendFile(path.resolve(here, "../web/circuit-setup.html"));
+  });
   app.get("/{*path}", (request, response, next) => {
     if (request.path.startsWith("/api/")) return next();
     response.sendFile(path.resolve(here, "../web/index.html"));

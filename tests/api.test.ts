@@ -18,6 +18,11 @@ describe("HTTP API", () => {
     await request(app).post("/api/sessions").send({ mode: "simulation", gpio: 17 }).expect(400);
   });
   it("keeps physical mode locked without a reviewed profile", async () => { const response = await request(app).post("/api/sessions").send({ mode: "physical" }).expect(409); expect(response.body.error).toMatch(/reviewed/); });
+  it("serves the circuit setup workbench", async () => {
+    const response = await request(app).get("/circuit-setup").expect(200);
+    expect(response.text).toContain("Circuit setup");
+    expect(response.text).toContain("Pin inspection");
+  });
   it("returns sensor guidance and bounded live observations", async () => {
     const created = await request(app).post("/api/sessions").send({ mode: "simulation" }).expect(201);
     const guidance = await request(app).get(`/api/sessions/${created.body.id}/devices/distance1/guidance`).expect(200);
