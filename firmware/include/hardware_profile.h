@@ -1,18 +1,32 @@
 #pragma once
 
-// SAFE-DISABLED TEMPLATE. Replace only after the board, wiring, ADC divider,
-// HC-SR04 echo protection, and power arrangement have been reviewed.
+// SAFE-DISABLED TEMPLATE. Set PHYSICAL_ENABLED only after reviewing the exact
+// ESP32-S3 board, 3.3 V wiring, protection resistors, and optional profile.
 namespace ahea::profile {
 constexpr bool PHYSICAL_ENABLED = false;
-constexpr const char* PROFILE_ID = "esp32-fsr-safe-disabled-v1";
-constexpr const char* BOARD_IDENTITY = "UNREVIEWED_ESP32_OR_ESP32S3";
-constexpr int DHT11_PIN = -1;
+constexpr const char* PROFILE_ID = "esp32s3-loopback-safe-disabled-v1";
+constexpr const char* BOARD_IDENTITY = "ESP32-S3-DEVKITC-1-UNREVIEWED";
+
+constexpr int LOOPBACK_STIMULUS_PIN = 4;
+constexpr int LOOPBACK_SOURCE_OBSERVER_PIN = 5;
+constexpr int LOOPBACK_DESTINATION_OBSERVER_PIN = 6;
+constexpr bool LOOPBACK_FIXTURE_REVIEWED = false;
+
+constexpr bool HC_SR04_ENABLED = false;
 constexpr int HC_SR04_TRIGGER_PIN = -1;
 constexpr int HC_SR04_ECHO_PIN = -1;
-constexpr bool HC_SR04_ECHO_PROTECTION_REVIEWED = false;
-constexpr int FSR_ADC_PINS[5] = {-1, -1, -1, -1, -1};
-constexpr unsigned long OPERATION_TIMEOUT_MS = 3000;
+constexpr bool HC_SR04_ECHO_DIVIDER_REVIEWED = false;
+constexpr int HC_SR04_ECHO_UPPER_OHMS = 8200;
+constexpr int HC_SR04_ECHO_LOWER_OHMS = 10000;
+
+constexpr bool MPU6050_ENABLED = false;
+constexpr uint8_t MPU6050_ADDRESS = 0x68;
+constexpr bool I2C_PULLUPS_AT_3V3_REVIEWED = false;
+
+constexpr bool DHT11_ENABLED = false;
+constexpr int DHT11_PIN = -1;
+constexpr bool DHT11_3V3_INTERFACE_REVIEWED = false;
+
+constexpr unsigned long OPERATION_TIMEOUT_MS = 6000;
 constexpr unsigned int MAX_SESSION_OPERATIONS = 24;
-constexpr bool SERVO_ACTUATION_ENABLED = false;
-constexpr bool RELAY_ACTUATION_ENABLED = false;
 }  // namespace ahea::profile

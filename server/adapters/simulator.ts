@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { ExperimentDefinition, HardwareStatus, Observation, ProjectContext, SimulationFixture } from "../../shared/domain.js";
-import { deviceById } from "../../shared/domain.js";
+import type { ExperimentDefinition, HardwareStatus, Measurement, Observation, ProjectContext, SimulationFixture } from "../../shared/domain.js";
+import { targetById } from "../../shared/domain.js";
+import { registryForContext } from "../modules.js";
 import type { ExecuteContext, HardwareAdapter } from "./adapter.js";
 
 export class SimulatorAdapter implements HardwareAdapter {
@@ -8,80 +9,82 @@ export class SimulatorAdapter implements HardwareAdapter {
   readonly name = "simulator" as const;
   private interventionDeclared = false;
   private estopLatched = false;
+  private sequence = 0;
   private readonly startedAt = Date.now();
-  private readonly calls = new Map<string, number>();
+  private readonly status: HardwareStatus;
 
-  constructor(readonly fixture: SimulationFixture, private readonly projectContext: ProjectContext) {}
-
-  async preflight(): Promise<HardwareStatus> {
-    return {
-      connected: true, firmwareVersion: "sim-2.0.0", boardIdentity: "SIM-ESP32S3", protocolVersion: "2.0", profileId: this.projectContext.hardwareProfileId, physicalEnabled: false, estopLatched: this.estopLatched,
-      supportedCommands: ["scan_i2c", "identify_mpu6050", "sample_mpu6050", "sample_dht11", "measure_distance", "sample_fsr", "abort"],
-      detectedDevices: this.projectContext.components.map((device) => ({ deviceId: device.id, type: device.type, present: true, identity: `SIM-${device.type.toUpperCase()}` })),
-      limitations: ["All measurements in this session are simulated."],
-    };
+  constructor(readonly fixture: SimulationFixture, private readonly context: ProjectContext) {
+    const registry = registryForContext(context);
+    this.status = { connected: true, firmwareVersion: "sim-3.0.0", boardIdentity: registry.boardIdentity, protocolVersion: "3.0", profileId: context.hardwareProfileId, physicalEnabled: false, estopLatched: false, registry, limitations: ["All measurements are deterministic simulation output and cannot produce physical confirmation."] };
   }
-  declareIntervention(): void { this.interventionDeclared = true; }
+  async preflight(): Promise<HardwareStatus> { return structuredClone(this.status); }
   async armSession(): Promise<void> {}
+  declareIntervention(): void { this.interventionDeclared = true; }
   async close(): Promise<void> {}
 
-  async execute(experiment: ExperimentDefinition, context: ExecuteContext): Promise<Observation> {
-    if (!experiment.command) throw new Error(`Experiment ${experiment.type} has no hardware command.`);
-    const device = experiment.targetDeviceId ? deviceById(this.projectContext, experiment.targetDeviceId) : undefined;
-    const started = Date.now();
-    const measurements: Observation["measurements"] = [];
-    const series: NonNullable<Observation["series"]> = [];
-    const sensorHealth: Observation["sensorHealth"] = [];
-    let accepted = true;
-    let timedOut = false;
-
+  async execute(experiment: ExperimentDefinition, execution: ExecuteContext): Promise<Observation> {
+    if (!experiment.command || !experiment.planId) throw new Error(`Experiment ${experiment.type} has no registered hardware plan.`);
+    const registered = this.status.registry.plans.find((entry) => entry.id === experiment.planId);
+    if (!registered) throw new Error(`Plan ${experiment.planId} was not advertised.`);
+    const target = targetById(this.context, experiment.targetId);
+    if (!target || target.type !== registered.targetType) throw new Error("Plan target does not match project context.");
+    const started = Date.now() - this.startedAt;
+    this.sequence += 1;
     if (experiment.command === "abort") this.estopLatched = true;
-    if (experiment.command === "sample_fsr" && device?.type === "fsr") {
-      const count = (this.calls.get(device.id) ?? 0) + 1;
-      this.calls.set(device.id, count);
-      const isSubject = device.id === this.projectContext.expectedBehavior.subjectDeviceIds[0];
-      const failed = this.fixture === "fsr_read_failure" && isSubject;
-      const noisy = this.fixture === "fsr_noisy" && isSubject;
-      const repaired = isSubject && this.interventionDeclared;
-      const referenceIndex = this.projectContext.expectedBehavior.referenceDeviceIds.indexOf(device.id);
-      const isBaselineProbe = experiment.phase === "monitoring" && experiment.id.startsWith("baseline:");
-      const center = isBaselineProbe ? 120 : repaired || this.fixture === "fsr_balanced" || !isSubject ? 1800 + Math.max(referenceIndex, 0) * 8 : 1000;
-      const amplitude = noisy ? 180 : 18;
-      const values = makeTrace(64, center + (count % 3 - 1) * 5, amplitude);
-      const sampleMean = mean(values);
-      const sampleStddev = stddev(values);
-      measurements.push(
-        { channel: "adc_mean", value: Number(sampleMean.toFixed(2)), unit: "adc_raw", deviceId: device.id, quality: failed ? "invalid" : "valid" },
-        { channel: "adc_stddev", value: Number(sampleStddev.toFixed(2)), unit: "adc_raw", deviceId: device.id, quality: failed ? "invalid" : "valid" },
-        { channel: "normalized_response", value: Number((sampleMean / device.circuit.adcMaximumRaw).toFixed(6)), unit: "ratio", deviceId: device.id, quality: failed ? "invalid" : "valid" },
-      );
-      series.push({ channel: "adc_raw", unit: "adc_raw", deviceId: device.id, sampleIntervalMs: 10, values });
-      sensorHealth.push({ deviceId: device.id, healthy: !failed, errorRate: failed ? 1 : 0, detail: failed ? "Simulated ADC read failure." : undefined });
-      accepted = !failed;
-    } else if (experiment.command === "sample_mpu6050" && device?.type === "mpu6050") {
-      const count = (this.calls.get(device.id) ?? 0) + 1; this.calls.set(device.id, count);
-      const motion = 0.08 + Math.abs(Math.sin(count * 0.7)) * 0.55; const values = makeTrace(48, motion, 0.06);
-      measurements.push({ channel: "acceleration_magnitude_g", value: Number(mean(values).toFixed(4)), unit: "g", deviceId: device.id, quality: "valid" }, { channel: "gyro_magnitude_dps", value: Number((motion * 82).toFixed(2)), unit: "deg/s", deviceId: device.id, quality: "valid" });
-      series.push({ channel: "acceleration_magnitude_g", unit: "g", deviceId: device.id, sampleIntervalMs: 20, values }); sensorHealth.push({ deviceId: device.id, healthy: true, errorRate: 0 });
-    } else if (experiment.command === "sample_dht11" && device?.type === "dht11") {
-      const count = (this.calls.get(device.id) ?? 0) + 1; this.calls.set(device.id, count); const temperature = 27 + Math.sin(count * 0.35) * 1.4; const humidity = 54 + Math.sin(count * 0.22) * 3;
-      measurements.push({ channel: "temperature_c", value: Number(temperature.toFixed(2)), unit: "C", deviceId: device.id, quality: "valid" }, { channel: "humidity_percent", value: Number(humidity.toFixed(2)), unit: "%", deviceId: device.id, quality: "valid" }); sensorHealth.push({ deviceId: device.id, healthy: true, errorRate: 0 });
-    } else if (experiment.command === "measure_distance" && device?.type === "hc_sr04") {
-      const count = (this.calls.get(device.id) ?? 0) + 1; this.calls.set(device.id, count); const center = 55 - Math.abs(Math.sin(count * 0.45)) * 32; const values = makeTrace(20, center, 0.7);
-      measurements.push({ channel: "distance_cm", value: Number(mean(values).toFixed(2)), unit: "cm", deviceId: device.id, quality: "valid" }, { channel: "distance_stddev_cm", value: Number(stddev(values).toFixed(2)), unit: "cm", deviceId: device.id, quality: "valid" }); series.push({ channel: "distance_cm", unit: "cm", deviceId: device.id, sampleIntervalMs: 60, values }); sensorHealth.push({ deviceId: device.id, healthy: true, errorRate: 0 });
-    } else if (device) {
-      measurements.push({ channel: "operation_supported", value: true, unit: "boolean", deviceId: device.id, quality: "valid" }); sensorHealth.push({ deviceId: device.id, healthy: true, errorRate: 0 });
-    } else {
-      sensorHealth.push({ deviceId: "firmware", healthy: true, errorRate: 0 });
-    }
-
+    const measurements = target.type === "loopback" ? this.loopbackMeasurements(experiment.planId, target.id) : this.sensorMeasurements(target.type, experiment.planId, target.id);
+    const invalid = measurements.some((entry) => entry.quality === "invalid");
+    const ended = Math.max(started + registered.durationMs, Date.now() - this.startedAt);
+    const binary = measurements.find((entry) => entry.channel === "destination_present")?.value === true;
     return {
-      id: randomUUID(), sessionId: context.sessionId, experimentId: experiment.id, deviceId: device?.id, deviceType: device?.type, source: "simulation", adapter: "simulator", command: experiment.command, phase: context.phase, capturedAt: new Date().toISOString(), deviceUptimeMs: Date.now() - this.startedAt, elapsedMs: Math.max(Date.now() - started, 25), measurements, series, sensorHealth,
-      operation: { accepted, aborted: experiment.command === "abort", timedOut, estopLatched: this.estopLatched, reasons: accepted ? [] : ["SIMULATED_READ_FAILURE"] }, projectContextDigest: context.projectContextDigest,
+      id: randomUUID(), sessionId: execution.sessionId, experimentId: experiment.id, targetId: target.id, targetType: target.type, source: "simulation", adapter: "simulator", command: experiment.command, planId: experiment.planId, phase: execution.phase, capturedAt: new Date().toISOString(), monotonicStartedMs: started, monotonicEndedMs: ended, sequenceNumber: this.sequence,
+      measurements,
+      series: target.type === "loopback" ? [{ channel: "destination_level", unit: "logic", targetId: target.id, sampleIntervalUs: 250, values: Array.from({ length: 32 }, (_, index) => binary && index % 2 === 0 ? 1 : 0) }] : [],
+      targetHealth: [{ targetId: target.id, healthy: !invalid, errorRate: invalid ? 1 : 0, detail: invalid ? "Simulated profile fault." : undefined }],
+      operation: { accepted: !invalid, aborted: experiment.command === "abort", timedOut: false, estopLatched: this.estopLatched, cleanupSucceeded: true, reasons: invalid ? ["SIMULATED_PROFILE_FAULT"] : [] },
+      projectContextDigest: execution.projectContextDigest, registryDigest: this.status.registry.digest, firmwareVersion: this.status.firmwareVersion, boardIdentity: this.status.boardIdentity, hardwareProfileId: this.status.profileId, bindingIds: registered.bindingIds, setupDeclaration: execution.setupDeclaration, gatewayValidation: execution.gatewayValidation, limitations: ["Simulated observation; no physical claim is supported.", ...registered.limitations],
     };
   }
-}
 
-function makeTrace(length: number, center: number, amplitude: number): number[] { return Array.from({ length }, (_, index) => Number((center + Math.sin(index * 0.71) * amplitude + Math.sin(index * 1.91) * amplitude * 0.3).toFixed(2))) }
-function mean(values: number[]): number { return values.reduce((sum, value) => sum + value, 0) / values.length }
-function stddev(values: number[]): number { const average = mean(values); return Math.sqrt(values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length) }
+  private loopbackMeasurements(planId: string, targetId: string): Measurement[] {
+    const repaired = this.interventionDeclared && this.fixture !== "loopback_verification_failure";
+    const open = (this.fixture === "loopback_open" || this.fixture === "loopback_verification_failure") && !repaired;
+    const distorted = this.fixture === "loopback_distorted" && !repaired;
+    const stimulusFault = this.fixture === "loopback_stimulus_fault";
+    const conflicting = this.fixture === "loopback_conflicting";
+    const sourcePresent = !stimulusFault;
+    const destinationPresent = sourcePresent && !open;
+    const sourceFrequency = sourcePresent ? 1000 : 0;
+    const destinationFrequency = destinationPresent ? (distorted ? 720 : 1000) : 0;
+    const sourceDuty = sourcePresent ? 50 : 0;
+    const destinationDuty = destinationPresent ? (distorted ? 68 : 50) : 0;
+    const correlation = sourcePresent && destinationPresent ? (distorted ? .62 : .998) : 0;
+    const values: Measurement[] = [];
+    const add = (channel: string, value: number | boolean, unit: string) => values.push({ channel, value, unit, targetId, quality: "valid" });
+    if (planId.includes("observe-destination")) { add("destination_present", destinationPresent, "boolean"); add("destination_frequency_hz", destinationFrequency, "Hz"); add("destination_duty_percent", destinationDuty, "%"); }
+    else if (planId.includes("observe-source")) { add("source_present", sourcePresent, "boolean"); add("source_frequency_hz", sourceFrequency, "Hz"); add("source_duty_percent", sourceDuty, "%"); }
+    else if (planId.includes("inspect-stimulus")) { add("source_static_sequence_valid", sourcePresent, "boolean"); add("destination_static_sequence_valid", destinationPresent, "boolean"); }
+    else {
+      const capturedDestination = conflicting ? false : destinationPresent;
+      add("source_present", sourcePresent, "boolean"); add("destination_present", capturedDestination, "boolean"); add("source_frequency_hz", sourceFrequency, "Hz"); add("destination_frequency_hz", capturedDestination ? destinationFrequency : 0, "Hz"); add("source_duty_percent", sourceDuty, "%"); add("destination_duty_percent", capturedDestination ? destinationDuty : 0, "%"); add("endpoint_correlation", capturedDestination ? correlation : 0, "ratio");
+    }
+    return values;
+  }
+
+  private sensorMeasurements(kind: Exclude<ProjectContext["profile"]["kind"], "loopback">, planId: string, targetId: string): Measurement[] {
+    const fault = this.fixture === "sensor_fault";
+    const value = (channel: string, entry: number | boolean, unit: string): Measurement => ({ channel, value: entry, unit, targetId, quality: fault ? "invalid" : "valid" });
+    if (kind === "hc_sr04") {
+      if (planId.includes("variance")) return [value("distance_stddev_cm", .7, "cm")];
+      if (planId.includes("progression")) return [value("progression_consistent", true, "boolean")];
+      return [value("distance_cm", 24.8, "cm"), value("timeout_rate", 0, "ratio")];
+    }
+    if (kind === "mpu6050") {
+      if (planId.includes("identity")) return [value("identity_valid", true, "boolean")];
+      if (planId.includes("stationary")) return [value("stationary_noise_g", .018, "g"), value("drift_dps", .4, "deg/s")];
+      return [value("motion_detected", true, "boolean"), value("axis_consistent", true, "boolean")];
+    }
+    if (planId.includes("response")) return [value("checksum_valid", true, "boolean"), value("response_time_us", 82, "us")];
+    if (planId.includes("valid-rate")) return [value("valid_rate", 1, "ratio"), value("stale_rate", 0, "ratio")];
+    return [value("temperature_c", 27.2, "C"), value("humidity_percent", 54, "%")];
+  }
+}

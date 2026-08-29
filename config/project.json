@@ -1,22 +1,22 @@
 {
-  "schemaVersion": 1,
-  "project": {
-    "id": "pressure-floor-demo",
-    "name": "Pressure-sensitive floor",
-    "goal": "Five FSR sensors should produce equivalent normalized responses under the same manual stimulus."
+  "schemaVersion": 2,
+  "project": { "id": "esp32s3-loopback-demo", "name": "ESP32-S3 protected loopback", "goal": "Determine whether a registered digital waveform reaches a physically separate destination node and adapt the next experiment to the evidence." },
+  "profile": { "kind": "loopback", "moduleId": "core.loopback.v1" },
+  "hardwareProfileId": "esp32s3-loopback-safe-disabled-v1",
+  "primaryTargetId": "loopback-path",
+  "targets": [{
+    "id": "loopback-path", "label": "Protected waveform path", "type": "loopback",
+    "bindingIds": ["gpio4_stimulus", "gpio5_source_observer", "gpio6_destination_observer"],
+    "bindings": { "stimulus": "gpio4_stimulus", "sourceObserver": "gpio5_source_observer", "destinationObserver": "gpio6_destination_observer" },
+    "fixture": { "stimulusSeriesOhms": 1000, "observerSeriesOhms": 4700, "destinationPulldownOhms": 100000, "removableJumper": true },
+    "expected": { "frequencyHz": 1000, "dutyPercent": 50, "durationMs": 500, "frequencyToleranceFraction": 0.05, "dutyTolerancePercent": 5, "minimumCorrelation": 0.95 },
+    "limitations": ["Timing is referenced to the ESP32-S3 timebase, not an independent instrument.", "The fixture supports bounded path conclusions only."]
+  }],
+  "allowedPlanIds": ["loopback.observe-destination.1khz.v1", "loopback.observe-source.1khz.v1", "loopback.compare-endpoints.1khz.v1", "loopback.measure-timing.1khz.v1", "loopback.inspect-stimulus.static.v1", "loopback.repeat-synchronized.500hz.v1", "loopback.verify-path.1khz.v1"],
+  "procedures": {
+    "setupChecklist": ["Use a common ground and 3.3 V logic only.", "Wire GPIO4 through 1 kΩ to the source node.", "Wire GPIO5 and GPIO6 to their nodes through separate 4.7 kΩ resistors.", "Install a removable source-to-destination jumper and a 100 kΩ destination pull-down."],
+    "interventionSafety": ["Power down before changing the jumper or wiring.", "A human must perform and declare every physical change."],
+    "reference": { "kind": "baseline_characterization", "description": "Waveform consistency is evaluated against the ESP32-S3 timebase; no independent reference instrument is present." }
   },
-  "hardwareProfileId": "esp32-fsr-safe-disabled-v1",
-  "components": [
-    { "id": "fsr1", "label": "FSR1", "type": "fsr", "role": "reference", "binding": "fsr_1_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
-    { "id": "fsr2", "label": "FSR2", "type": "fsr", "role": "reference", "binding": "fsr_2_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
-    { "id": "fsr3", "label": "FSR3", "type": "fsr", "role": "reference", "binding": "fsr_3_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
-    { "id": "fsr4", "label": "FSR4", "type": "fsr", "role": "reference", "binding": "fsr_4_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
-    { "id": "fsr5", "label": "FSR5", "type": "fsr", "role": "subject", "binding": "fsr_5_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
-    { "id": "motion1", "label": "MPU6050 motion sensor", "type": "mpu6050", "role": "observer", "binding": "mpu6050_i2c", "address": "0x68", "expected": { "maximumAccelerationStddevG": 0.08, "maximumInvalidSampleRate": 0.05 } },
-    { "id": "climate1", "label": "DHT11 climate sensor", "type": "dht11", "role": "observer", "binding": "dht11_data", "expected": { "temperatureC": [10, 50], "humidityPercent": [10, 90], "maximumInvalidSampleRate": 0.1 } },
-    { "id": "distance1", "label": "HC-SR04 distance sensor", "type": "hc_sr04", "role": "observer", "binding": "hc_sr04_timing", "echoProtectionReviewed": false, "expected": { "distanceCm": [2, 400], "maximumStddevCm": 2, "maximumTimeoutRate": 0.05 } }
-  ],
-  "expectedBehavior": { "kind": "equivalent_normalized_response", "referenceDeviceIds": ["fsr1", "fsr2", "fsr3", "fsr4"], "subjectDeviceIds": ["fsr5"], "toleranceFraction": 0.1 },
-  "procedures": { "fsrStimulus": { "kind": "repeatable_manual", "trialsPerDevice": 1, "operatorConfirmationRequired": true } },
-  "constraints": { "maximumExperiments": 24, "physicalSourceRequiredForConfirmation": true, "humanApprovalBeforeModification": true, "allowedResistorOhms": [10000, 22000, 33000, 47000, 56000, 68000, 100000], "maximumDividerCurrentMilliamps": 1 }
+  "constraints": { "maximumExperiments": 12, "maximumMonitoringReads": 40, "requiredVerificationPasses": 2, "physicalSourceRequiredForConfirmation": true, "humanOnlyIntervention": true }
 }

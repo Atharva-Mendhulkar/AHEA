@@ -2,7 +2,7 @@
 #include <cstdint>
 
 namespace ahea {
-enum class OperationClass { Read, TimedIo, Actuation };
+enum class OperationClass { Read, TimedIo, BoundedOutput };
 enum class SafetyState { Unarmed, Armed, Running, Estopped, Faulted };
 enum class StartResult { Accepted, NotArmed, Busy, BudgetExhausted, OperationDisabled, Estopped };
 

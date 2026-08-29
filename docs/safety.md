@@ -2,13 +2,15 @@
 
 AHEA is a prototype, not certified test equipment.
 
-- The model chooses only backend-offered experiment IDs.
-- The gateway validates device membership, plan identity, lifecycle, setup confirmation, intervention, and budget.
-- Firmware resolves logical device IDs to compile-time bindings and applies its own operation budget and timeout.
-- Simulation and physical evidence are immutable and isolated.
-- FSR candidate values come only from project configuration and deterministic divider calculations.
-- Physical component replacement always requires human approval and power disconnection.
+- ESP32-S3 GPIO is not 5 V tolerant.
+- The model selects only backend-offered opaque experiment IDs.
+- The gateway validates exact plan identity, target bindings, phase, lifecycle, setup confirmation, intervention, profile, and budget.
+- Firmware independently resolves registered plans to fixed pins and timing, enforces deadlines and budgets, and reports cleanup.
+- GPIO4 is low before and after every loopback plan and on abort or fault paths.
+- Physical and simulation observations are immutable and cannot share an evidence chain.
+- Every physical change is performed and declared by a human after an evidence-supported diagnosis.
+- Two consecutive physical verification passes are required for `CONFIRMED`.
 
-The sensor-first profile contains no enabled actuation. Servo and relay operations are unavailable. A bare 5 V relay must never be connected directly to an ESP32 GPIO; it requires an appropriate driver and flyback protection. HC-SR04 echo must not reach an ESP32 input until 5 V-to-3.3 V protection is reviewed.
+Optional profile requirements are non-negotiable: the HC-SR04 Echo line uses a reviewed 8.2 kΩ/10 kΩ level divider, MPU6050 I²C pull-ups terminate at 3.3 V, and the DHT11 data line uses a verified 3.3 V-compatible interface or reviewed level shifting.
 
-The bundled firmware profile is safe-disabled. Unknown bindings, plans, malformed input, duplicate requests, operation overlap, timeouts, exhausted budgets, and abort state fail closed.
+Native ESP32-S3 observations cannot establish current, resistance, impedance, negative voltage, mechanical behavior, exact component failure, laboratory-grade ADC accuracy, or independent frequency calibration.

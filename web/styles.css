@@ -373,13 +373,12 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
 .agent-layout { display: grid; grid-template-columns: minmax(0, 8.4fr) minmax(285px, 3.6fr); gap: 1rem; align-items: start; }
 .agent-console { position: relative; min-width: 0; min-height: 0; padding: clamp(1rem, 2vw, 1.35rem); transition: border-color 240ms ease, box-shadow 240ms ease, background-color 240ms ease; }
 .agent-console::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: var(--accent); opacity: 0; transform: scaleX(.08); transform-origin: left; transition: opacity 180ms ease, transform 420ms cubic-bezier(.2,.8,.2,1); }
-.agent-console[data-agent-state="INITIALIZING"]::before,
-.agent-console[data-agent-state="WAITING_FOR_USER_STIMULUS"]::before,
-.agent-console[data-agent-state="RECORDING"]::before,
+.agent-console[data-agent-state="READY_TO_EXECUTE"]::before,
+.agent-console[data-agent-state="EXECUTING"]::before,
 .agent-console[data-agent-state="ANALYZING"]::before,
 .agent-console[data-agent-state="SELECTING_NEXT_EXPERIMENT"]::before,
-.agent-console[data-agent-state="POST_INTERVENTION_VERIFY"]::before { opacity: 1; transform: scaleX(1); }
-.agent-console[data-agent-state="RECORDING"] { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); box-shadow: 0 1px 2px rgba(10,10,10,.04), 0 20px 60px color-mix(in srgb, var(--accent) 9%, transparent); }
+.agent-console[data-agent-state="VERIFYING"]::before { opacity: 1; transform: scaleX(1); }
+.agent-console[data-agent-state="EXECUTING"] { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); box-shadow: 0 1px 2px rgba(10,10,10,.04), 0 20px 60px color-mix(in srgb, var(--accent) 9%, transparent); }
 .agent-console[data-agent-state="CONFIRMED"] { border-color: color-mix(in srgb, var(--success) 42%, var(--border)); }
 .agent-console-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 .agent-identity { display: flex; align-items: center; gap: .8rem; }
@@ -401,11 +400,10 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
 .diagnostic-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: .85rem; align-items: stretch; }
 .graph-region { min-width: 0; }
 .state-graph { position: relative; height: clamp(190px, 23vw, 220px); overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background-color: var(--background); background-image: linear-gradient(to right, color-mix(in srgb, var(--border) 45%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--border) 45%, transparent) 1px, transparent 1px); background-size: calc(100% / 8) 100%, 100% calc(100% / 5); transition: height 320ms cubic-bezier(.2,.8,.2,1); }
-.agent-console[data-agent-state="INITIALIZING"] .state-graph,
-.agent-console[data-agent-state="WAITING_FOR_USER_STIMULUS"] .state-graph,
-.agent-console[data-agent-state="RECORDING"] .state-graph,
+.agent-console[data-agent-state="READY_TO_EXECUTE"] .state-graph,
+.agent-console[data-agent-state="EXECUTING"] .state-graph,
 .agent-console[data-agent-state="SELECTING_NEXT_EXPERIMENT"] .state-graph,
-.agent-console[data-agent-state="POST_INTERVENTION_VERIFY"] .state-graph { height: clamp(290px, 34vw, 390px); }
+.agent-console[data-agent-state="VERIFYING"] .state-graph { height: clamp(290px, 34vw, 390px); }
 .state-graph canvas { display: block; width: 100%; height: 100%; }
 .graph-labels { position: absolute; z-index: 2; top: .8rem; left: .9rem; right: .9rem; display: flex; justify-content: space-between; gap: 1rem; pointer-events: none; }
 .graph-labels span { padding: .24rem .42rem; color: var(--muted-foreground); background: color-mix(in srgb, var(--background) 84%, transparent); border-radius: 5px; font: .61rem ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .04em; text-transform: uppercase; backdrop-filter: blur(8px); }
@@ -447,21 +445,23 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
 .recommendation-change { min-width: 0; }
 .recommendation-change > p { margin: .28rem 0 0; color: var(--muted-foreground); font-size: .72rem; line-height: 1.35; }
 .recommendation-kicker { color: var(--muted-foreground); font: .58rem ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .055em; text-transform: uppercase; }
-.adjustment-visual { display: flex; align-items: center; gap: .8rem; min-width: 0; }
-.resistor-change { display: flex; align-items: baseline; gap: .65rem; margin-top: .15rem; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
-.resistor-change span { color: var(--muted-foreground); font-size: .92rem; text-decoration: line-through; }
-.resistor-change i { color: var(--warning); font-style: normal; }
-.resistor-change strong, .recommendation-value { margin: 0; font-size: clamp(1.35rem, 2.2vw, 1.9rem); line-height: 1; letter-spacing: -.035em; }
-.recommendation-value { margin-top: .2rem; }
-.resistor-visual { flex: 0 0 auto; width: 138px; margin: 0; padding-left: .7rem; border-left: 1px solid color-mix(in srgb, var(--warning) 34%, var(--border)); }
-.resistor-visual img { display: block; width: 100%; height: auto; }
-.resistor-visual figcaption { margin-top: -.1rem; overflow: hidden; color: var(--muted-foreground); font: .52rem ui-monospace, "SFMono-Regular", Consolas, monospace; text-align: center; text-overflow: ellipsis; white-space: nowrap; text-transform: capitalize; }
 .recommendation-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
 .recommendation-details p { margin: 0; padding-left: .75rem; border-left: 1px solid color-mix(in srgb, var(--warning) 36%, var(--border)); font-size: .68rem; line-height: 1.38; }
 .recommendation-details span { display: block; margin-bottom: .15rem; color: var(--muted-foreground); font: .6rem ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .05em; text-transform: uppercase; }
 .agent-actions { display: flex; align-items: end; gap: .7rem; margin-top: .75rem; }
 .agent-actions > .button { min-width: 170px; }
 .intervention-action { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .7rem; }
+.action-cluster { display: flex; align-items: center; gap: .8rem; }
+.check-label { display: inline-flex; align-items: center; gap: .5rem; color: var(--muted-foreground); font-size: .72rem; line-height: 1.35; }
+.check-label input { accent-color: var(--accent); }
+.statement-list { display: grid; gap: .45rem; margin-bottom: .9rem; }
+.statement { padding: .65rem .72rem; border: 1px solid var(--border); border-radius: 8px; background: var(--background); }
+.statement p { margin: 0; font-size: .74rem; line-height: 1.45; }
+.statement small, .empty-copy { display: block; margin-top: .3rem; color: var(--muted-foreground); font: .61rem ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+.plan-list { display: grid; gap: .35rem; max-height: 185px; overflow: auto; }
+.plan-row { padding: .45rem .55rem; border: 1px solid var(--border); border-radius: 7px; background: var(--background); }
+.plan-row span { display: block; font-size: .7rem; font-weight: 600; }
+.plan-row code { display: block; margin-top: .16rem; color: var(--muted-foreground); font-size: .56rem; overflow-wrap: anywhere; }
 .agent-console[data-agent-state="IDLE"] .agent-actions { margin-top: .55rem; }
 .agent-console[data-agent-state="IDLE"] #start-investigation { min-width: 190px; }
 .agent-console[data-agent-state="WAITING_FOR_INTERVENTION"] .agent-actions { margin-top: 0; padding: .75rem .85rem; border: 1px solid color-mix(in srgb, var(--warning) 48%, var(--border)); border-top: 0; border-radius: 0 0 9px 9px; background: color-mix(in srgb, var(--warning-soft) 72%, var(--background)); }
@@ -469,11 +469,11 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
 
 .agent-console[data-agent-state="ANALYZING"] .diagnostic-grid,
 .agent-console[data-agent-state="WAITING_FOR_INTERVENTION"] .diagnostic-grid,
-.agent-console[data-agent-state="DIAGNOSIS_READY"] .diagnostic-grid,
+.agent-console[data-agent-state="FAILED_VERIFICATION"] .diagnostic-grid,
 .agent-console[data-agent-state="CONFIRMED"] .diagnostic-grid { grid-template-columns: minmax(290px, .92fr) minmax(380px, 1.08fr); }
 .agent-console[data-agent-state="ANALYZING"] .state-graph,
 .agent-console[data-agent-state="WAITING_FOR_INTERVENTION"] .state-graph,
-.agent-console[data-agent-state="DIAGNOSIS_READY"] .state-graph,
+.agent-console[data-agent-state="FAILED_VERIFICATION"] .state-graph,
 .agent-console[data-agent-state="CONFIRMED"] .state-graph { height: 240px; }
 
 .session-sidebar { display: grid; gap: 1rem; position: sticky; top: 78px; }
@@ -481,7 +481,7 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
 .compact-card .card-header { margin-bottom: .5rem; }
 .compact-card .card-header h2 { font-size: .9rem; }
 .status-dot { width: 8px; height: 8px; margin-top: .3rem; border-radius: 50%; background: var(--danger); }
-.status-dot[data-healthy="true"] { background: var(--success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 12%, transparent); }
+.status-dot[data-healthy="true"], .status-dot.online { background: var(--success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 12%, transparent); }
 .timeline-card summary { display: flex; align-items: center; justify-content: space-between; gap: .75rem; cursor: pointer; list-style: none; }
 .timeline-card summary::-webkit-details-marker { display: none; }
 .timeline-card summary .eyebrow { display: block; margin: 0 0 .2rem; }
@@ -510,10 +510,8 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
   .telemetry-strip div:nth-child(2n) { border-right: 0; }
   .telemetry-strip div:last-child { grid-column: 1 / -1; border-bottom: 0; }
   .analysis-columns, .recommendation-card, .recommendation-details, .session-sidebar { grid-template-columns: 1fr; }
-  .adjustment-visual { align-items: flex-start; flex-direction: column; }
-  .resistor-visual { width: min(190px, 100%); padding: .35rem 0 0; border-top: 1px solid color-mix(in srgb, var(--warning) 34%, var(--border)); border-left: 0; }
   .project-checks ol { columns: 1; }
-  .agent-actions, .intervention-action { align-items: stretch; grid-template-columns: 1fr; flex-direction: column; }
+  .agent-actions, .intervention-action, .action-cluster { align-items: stretch; grid-template-columns: 1fr; flex-direction: column; }
   .agent-actions .button { width: 100%; }
 }
 

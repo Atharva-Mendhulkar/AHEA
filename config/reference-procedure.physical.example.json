@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "replace-with-reference-procedure-id",
+  "projectId": "replace-with-project-id",
+  "hardwareProfileId": "replace-with-reviewed-profile-id",
+  "kind": "project_calibration",
+  "referenceInstrument": "replace-with-independent-reference",
+  "traceability": "replace-with-reference traceability and uncertainty",
+  "procedure": "replace-with-repeatable comparison procedure",
+  "limitations": ["A declared independent reference is required before using the term project calibration."]
+}

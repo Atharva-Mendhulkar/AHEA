@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2,
+  "project": { "id": "dht11-demo", "name": "DHT11 diagnostics", "goal": "Characterize response timing, checksum health, valid rate, stale readings, temperature, and humidity." },
+  "profile": { "kind": "dht11", "moduleId": "optional.dht11.v1" },
+  "hardwareProfileId": "esp32s3-dht11-safe-disabled-v1",
+  "primaryTargetId": "climate-sensor",
+  "targets": [{ "id": "climate-sensor", "label": "DHT11", "type": "dht11", "bindingIds": ["dht_data_3v3"], "dataInterface": { "pullupVolts": 3.3, "levelShifted": false, "reviewed": false }, "expected": { "temperatureC": [0, 50], "humidityPercent": [20, 90], "maximumInvalidRate": 0.1, "minimumReadIntervalMs": 2000 }, "limitations": ["Resolution, response lag, placement, and self-heating limit conclusions."] }],
+  "allowedPlanIds": ["dht11.response.v1", "dht11.environment.v1", "dht11.valid-rate.v1"],
+  "procedures": { "setupChecklist": ["Verify the data pull-up is 3.3 V or add reviewed level shifting."], "interventionSafety": ["Power down before rewiring."], "reference": { "kind": "baseline_characterization", "description": "No trusted environmental reference is declared." } },
+  "constraints": { "maximumExperiments": 12, "maximumMonitoringReads": 40, "requiredVerificationPasses": 2, "physicalSourceRequiredForConfirmation": true, "humanOnlyIntervention": true }
+}

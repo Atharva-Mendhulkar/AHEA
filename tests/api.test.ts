@@ -10,34 +10,24 @@ import { TestAgent } from "./helpers.js";
 
 describe("HTTP API", () => {
   let root: string; let app: ReturnType<typeof createApp>;
-  beforeAll(async () => { root = await mkdtemp(path.join(tmpdir(), "ahea-api-")); app = createApp(new Coordinator({ store: new JsonStore(root), agent: new TestAgent(), physicalEnabled: false, stateDwellMs: 0 })); });
+  beforeAll(async () => { root = await mkdtemp(path.join(tmpdir(), "ahea-api-")); app = createApp(new Coordinator({ store: new JsonStore(root), agent: new TestAgent(), physicalEnabled: false })); });
   afterAll(async () => rm(root, { recursive: true, force: true }));
-  it("creates a context-bound simulation session and rejects unknown input", async () => {
-    const created = await request(app).post("/api/sessions").send({ mode: "simulation", fixture: "fsr_outlier_compensable" }).expect(201);
-    expect(created.body.schemaVersion).toBe(2); expect(created.body.targetDeviceId).toBe("fsr5"); expect(created.body.projectContextDigest).toMatch(/^[a-f0-9]{64}$/);
+  it("lists the core and optional project contexts", async () => { const response = await request(app).get("/api/project-contexts").expect(200); expect(Object.keys(response.body)).toEqual(["loopback", "hc_sr04", "mpu6050", "dht11"]); });
+  it("creates a context-bound loopback simulation and rejects raw input", async () => {
+    const created = await request(app).post("/api/sessions").send({ mode: "simulation", fixture: "loopback_open" }).expect(201);
+    expect(created.body.schemaVersion).toBe(3); expect(created.body.targetId).toBe("loopback-path"); expect(created.body.hardware.registry.plans).toHaveLength(7); expect(created.body.projectContextDigest).toMatch(/^[a-f0-9]{64}$/);
     await request(app).post("/api/sessions").send({ mode: "simulation", gpio: 17 }).expect(400);
   });
-  it("keeps physical mode locked without a reviewed profile", async () => { const response = await request(app).post("/api/sessions").send({ mode: "physical" }).expect(409); expect(response.body.error).toMatch(/reviewed/); });
+  it("keeps physical mode locked for the bundled profile", async () => { const response = await request(app).post("/api/sessions").send({ mode: "physical" }).expect(409); expect(response.body.error).toMatch(/reviewed/i); });
   it("serves the circuit setup workbench", async () => {
     const response = await request(app).get("/circuit-setup").expect(200);
     expect(response.text).toContain("Circuit setup");
     expect(response.text).toContain("Pin inspection");
   });
-  it("returns sensor guidance and bounded live observations", async () => {
-    const created = await request(app).post("/api/sessions").send({ mode: "simulation" }).expect(201);
-    const guidance = await request(app).get(`/api/sessions/${created.body.id}/devices/distance1/guidance`).expect(200);
-    expect(guidance.body.guidance.steps.join(" ")).toMatch(/obstacle/i);
-    const reading = await request(app).post(`/api/sessions/${created.body.id}/devices/distance1/live-reading`).send({}).expect(200);
-    expect(reading.body.observation.phase).toBe("monitoring"); expect(reading.body.observation.measurements[0].channel).toBe("distance_cm");
-  });
-  it("starts and advances an agent-owned recording state", async () => {
-    const created = await request(app).post("/api/sessions").send({ mode: "simulation" }).expect(201);
-    const submitted = await request(app).post(`/api/sessions/${created.body.id}/problem`).send({ problem: "FSR5 is abnormal." }).expect(200);
-    expect(submitted.body.agentState).toBe("IDLE");
-    const started = await request(app).post(`/api/sessions/${created.body.id}/investigation/start`).send({}).expect(200);
-    expect(started.body.agentState).toBe("INITIALIZING");
-    const baseline = await request(app).post(`/api/sessions/${created.body.id}/investigation/advance`).send({}).expect(200);
-    expect(baseline.body.agentState).toBe("WAITING_FOR_USER_STIMULUS");
-    expect(baseline.body.activeExperiment.baseline).toBeTypeOf("number");
+  it("starts and advances the destination-first investigation", async () => {
+    const created = await request(app).post("/api/sessions").send({ mode: "simulation", fixture: "loopback_open" }).expect(201);
+    const submitted = await request(app).post(`/api/sessions/${created.body.id}/problem`).send({ problem: "The loopback destination is missing." }).expect(200); expect(submitted.body.pendingDecision.experiment.type).toBe("observe_destination");
+    const started = await request(app).post(`/api/sessions/${created.body.id}/investigation/start`).send({}).expect(200); expect(started.body.agentState).toBe("READY_TO_EXECUTE");
+    const advanced = await request(app).post(`/api/sessions/${created.body.id}/investigation/advance`).send({}).expect(200); expect(advanced.body.observations[0].planId).toBe("loopback.observe-destination.1khz.v1");
   });
 });

@@ -2,7 +2,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSessionSchema, executeDecisionSchema, interventionSchema, problemSchema } from "../shared/schemas.js";
-import { defaultProjectContext } from "./config.js";
+import { defaultProjectContext, optionalProjectContexts } from "./config.js";
 import { Coordinator, DomainError } from "./coordinator.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,7 +21,7 @@ export function createApp(coordinator: Coordinator) {
 
   app.post("/api/sessions", asyncRoute(async (request, response) => {
     const input = createSessionSchema.parse(request.body);
-    const session = await coordinator.createSession(input.mode, input.fixture, input.projectContext, input.targetDeviceId);
+    const session = await coordinator.createSession(input.mode, input.fixture, input.projectContext, input.targetId);
     response.status(201).json(session);
   }));
 
@@ -42,12 +42,12 @@ export function createApp(coordinator: Coordinator) {
     response.json(await coordinator.advanceInvestigation(String(request.params.id)));
   }));
 
-  app.get("/api/sessions/:id/devices/:deviceId/guidance", asyncRoute(async (request, response) => {
-    response.json(await coordinator.deviceGuidance(String(request.params.id), String(request.params.deviceId)));
+  app.get("/api/sessions/:id/guidance", asyncRoute(async (request, response) => {
+    response.json(await coordinator.targetGuidance(String(request.params.id)));
   }));
 
-  app.post("/api/sessions/:id/devices/:deviceId/live-reading", asyncRoute(async (request, response) => {
-    response.json(await coordinator.captureLiveReading(String(request.params.id), String(request.params.deviceId)));
+  app.post("/api/sessions/:id/live-reading", asyncRoute(async (request, response) => {
+    response.json(await coordinator.captureLiveReading(String(request.params.id)));
   }));
 
   app.get("/api/sessions/:id/pending-decision", asyncRoute(async (request, response) => {
@@ -56,13 +56,13 @@ export function createApp(coordinator: Coordinator) {
   }));
 
   app.post("/api/sessions/:id/decisions/:decisionId/execute", asyncRoute(async (request, response) => {
-    const { expectedVersion, setupConfirmed } = executeDecisionSchema.parse(request.body);
-    response.json(await coordinator.executePending(String(request.params.id), String(request.params.decisionId), expectedVersion, setupConfirmed));
+    const { expectedVersion, setupConfirmed, setupDeclaration } = executeDecisionSchema.parse(request.body);
+    response.json(await coordinator.executePending(String(request.params.id), String(request.params.decisionId), expectedVersion, setupConfirmed, setupDeclaration));
   }));
 
   app.post("/api/sessions/:id/interventions", asyncRoute(async (request, response) => {
-    const { description, recommendationId } = interventionSchema.parse(request.body);
-    response.json(await coordinator.declareIntervention(String(request.params.id), description, recommendationId));
+    const { description, recommendationId, safetyConfirmed } = interventionSchema.parse(request.body);
+    response.json(await coordinator.declareIntervention(String(request.params.id), description, recommendationId, safetyConfirmed));
   }));
 
   app.post("/api/sessions/:id/emergency-stop", asyncRoute(async (request, response) => {
@@ -91,6 +91,7 @@ export function createApp(coordinator: Coordinator) {
   }));
 
   app.get("/api/project-context/default", (_request, response) => response.json(defaultProjectContext));
+  app.get("/api/project-contexts", (_request, response) => response.json({ loopback: defaultProjectContext, ...optionalProjectContexts }));
 
   app.use(express.static(path.resolve(here, "../web")));
   app.get("/circuit-setup", (_request, response) => {

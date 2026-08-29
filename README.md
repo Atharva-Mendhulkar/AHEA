@@ -1,28 +1,20 @@
 # AHEA Hardware Agent
 
-AHEA is a safety-bounded agentic framework that compares intended hardware behavior from project context with measurements from an ESP32, selects the next useful experiment, and verifies repairs or tuning changes.
+AHEA is an ESP32-S3-centered framework for evidence-driven physical diagnostics. An agent chooses among backend-offered registered experiments; firmware and the safety gateway own the electrical details; deterministic rules decide what observations support.
 
-The MVP is a sensor-first FSR reference/outlier investigation. Four known-good FSR channels establish a deterministic response range; an abnormal fifth channel is measured, compared, and—only when its divider circuit is fully declared—matched against a bounded resistor candidate set. A human performs any component change before repeated verification.
+The required proof is a protected waveform loopback with separate source and destination observers. HC-SR04, MPU6050, and DHT11 are optional profiles built on the same capability, provenance, evidence, and lifecycle interfaces. See [prd.md](prd.md) for the complete requirements.
 
-The browser presents one agent session rather than a manual trial worksheet. After one **Start investigation** action, backend state drives baseline capture, sensor-specific stimulus prompts, live response detection, bounded recording, analysis, next-experiment selection, and post-intervention verification. The browser never decides whether evidence is sufficient.
+## Core loopback fixture
 
-See [prd.md](prd.md) for the maintained product requirements.
+```text
+GPIO4 ── 1 kΩ ── source ── removable jumper ── destination ── 100 kΩ ── GND
+                    │                              │
+                  4.7 kΩ                         4.7 kΩ
+                    │                              │
+                  GPIO5                          GPIO6
+```
 
-## Core boundaries
-
-- The model selects only backend-offered semantic experiment IDs.
-- The backend owns eligibility, statistics, diagnosis, recommendations, confidence, and lifecycle.
-- Firmware owns fixed bindings, plan IDs, timeouts, budgets, deduplication, and abort behavior.
-- Physical and simulated observations cannot be mixed.
-- Servo and relay actuation are disabled until their power, driver, and observation setup is separately reviewed.
-- No dedicated current or voltage sensor is required by the MVP.
-
-## Supported sensor capabilities
-
-- MPU6050: I²C presence/identity plus bounded acceleration and gyroscope sampling.
-- DHT11: bounded temperature/humidity reads with failure detection.
-- HC-SR04: bounded echo timing and distance measurement after echo protection review.
-- FSR: repeated ADC sampling, mean/variance, known-good comparison, and bounded divider analysis.
+The initial registered plan is 1 kHz, 50% duty cycle, and 500 ms. GPIO4 is low before and after every operation. The same ESP32-S3 generates and observes the signal, so timing results establish internal consistency rather than independent calibration.
 
 ## Quick start
 
@@ -30,26 +22,36 @@ Requirements: Node.js 22+ and npm 10+.
 
 ```bash
 npm install
-cp .env.example .env
 npm run dev
 ```
 
-Open `http://localhost:3000` and use the FSR simulation fixtures. Without `OPENAI_API_KEY`, the visibly recorded deterministic fallback selects from the same safe experiment list.
+Open `http://localhost:3000`. Simulation is the default and never produces physical `CONFIRMED` status. An OpenAI key is optional; without one, the deterministic selector chooses from the same eligible experiment set.
 
 ## Commands
 
 | Command | Purpose |
-| --- | --- |
+|---|---|
 | `npm run dev` | Start the TypeScript server in watch mode |
-| `npm run build` | Compile TypeScript |
+| `npm run build` | Type-check and compile |
 | `npm test` | Run deterministic tests |
 | `npm run check` | Build and test |
-| `npm run test:openai` | Run opt-in live model selection |
+| `npm run test:openai` | Run the opt-in live selector test |
 | `npm run firmware:test` | Run native firmware safety tests with PlatformIO |
 | `npm run firmware:build` | Build safe-disabled ESP32-S3 firmware |
 
+## Trust boundaries
+
+- Project context is immutable within a session and is attached by digest to every observation.
+- The agent selects only opaque experiment IDs; it cannot set pins, timing, waveform, ADC, or bus parameters.
+- Firmware advertises its registered capabilities; the backend matches their safety-critical definitions before arming, and firmware independently enforces plans, timeouts, budgets, and cleanup.
+- Evidence, confidence labels, lifecycle, and verification counters are backend-owned and deterministic.
+- Physical changes are human-only and require an explicit declaration.
+- Two consecutive physical passes are required for `CONFIRMED`.
+- Physical and simulation provenance cannot be mixed.
+
 ## API
 
+- `GET /api/project-contexts`
 - `GET /api/project-context/default`
 - `POST /api/sessions`
 - `POST /api/sessions/:id/problem`
@@ -65,6 +67,4 @@ Open `http://localhost:3000` and use the FSR simulation fixtures. Without `OPENA
 
 ## Physical status
 
-Physical mode ships disabled. The bundled project and resistor values are a simulation example, not a claim about the user's unconfirmed FSR circuit. Before physical use, record the exact board, fixed pins, FSR topology and units, ADC limits, DHT wiring, and HC-SR04 echo protection in a reviewed profile.
-
-Simulation tests do not validate real sensors, wiring, timing, ADC calibration, manual-pressure repeatability, or resistor effectiveness.
+The committed hardware profile is deliberately disabled. Physical use requires a reviewed ESP32-S3 board/profile, the exact protected loopback wiring, a matching firmware capability registry, and explicit setup confirmation. Simulation validates orchestration and evidence branching only; it does not validate real voltage levels, wiring, timing accuracy, or repairs.

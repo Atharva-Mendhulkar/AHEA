@@ -3,101 +3,76 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="AHEA evidence-bounded hardware investigation agent">
+    <meta name="description" content="AHEA — evidence-driven ESP32-S3 hardware diagnosis">
     <link rel="icon" href="/logo.svg" type="image/svg+xml">
     <script>const initialTheme = localStorage.getItem("ahea-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); document.documentElement.dataset.theme = initialTheme; document.documentElement.classList.toggle("dark", initialTheme === "dark");</script>
-    <title>AHEA — Hardware Agent</title>
+    <title>AHEA — ESP32-S3 Diagnostic Agent</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <header class="app-bar">
-      <a id="brand-home" class="brand" href="/" aria-label="Return to AHEA setup"><img class="brand-logo" src="/logo.svg" alt=""><span>AHEA</span></a>
-      <div class="breadcrumb"><span>Workbench</span><span>/</span><strong>Agent session</strong></div>
-      <div class="app-actions"><span id="mode-badge" class="badge" data-tone="info">Simulation</span><span id="connection-badge" class="badge">Not connected</span><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark theme" title="Switch theme"><svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path></svg></button><button id="estop" class="button button-danger button-compact" type="button" disabled>Stop</button></div>
+      <a id="brand-home" class="brand" href="/" aria-label="Return to setup"><img class="brand-logo" src="/logo.svg" alt=""><span>AHEA</span></a>
+      <div class="breadcrumb"><span>Workbench</span><span>/</span><strong>Evidence session</strong></div>
+      <div class="app-actions"><span id="mode-badge" class="badge" data-tone="info">Simulation</span><span id="connection-badge" class="badge">Not connected</span><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch theme">◐</button><button id="estop" class="button button-danger button-compact" type="button" disabled>Stop</button></div>
     </header>
 
     <main class="shell">
       <section id="setup" class="setup-layout">
-        <div class="setup-copy"><span class="section-index">AHEA / AGENT</span><p class="eyebrow">Project-context hardware debugger</p><h1>Describe the fault.<br>The agent runs the test.</h1><p class="lede">AHEA chooses bounded experiments, watches the physical response, stops when the evidence is sufficient, and explains what to change.</p><div class="principles"><span>Agent-directed</span><span>Physical evidence</span><span>Bounded changes</span></div><a class="button button-secondary setup-link" href="/circuit-setup">Setup circuit <span aria-hidden="true">→</span></a></div>
+        <div class="setup-copy"><span class="section-index">AHEA / ESP32-S3</span><p class="eyebrow">Evidence-driven hardware diagnostics</p><h1>Observe first.<br>Change only with evidence.</h1><p class="lede">AHEA selects registered experiments, validates them at a safety boundary, and keeps physical observations separate from inference and repair advice.</p><div class="principles"><span>Registered plans</span><span>Deterministic evidence</span><span>Human intervention</span></div><a class="button button-secondary setup-link" href="/circuit-setup">Setup circuit <span aria-hidden="true">→</span></a></div>
         <form id="start-form" class="card setup-card">
-          <div class="card-header"><div><p class="eyebrow">New investigation</p><h2>Tell the agent what is wrong</h2></div><span class="agent-orb idle" aria-hidden="true"></span></div>
+          <div class="card-header"><div><p class="eyebrow">New investigation</p><h2>Select a diagnostic profile</h2></div><span class="agent-orb idle" aria-hidden="true"></span></div>
           <div class="field-row">
-            <label class="field">Evidence source<select id="mode"><option value="simulation">Simulation</option><option value="physical">Physical — safe locked</option></select><small>Provenance cannot change after the session starts.</small></label>
-            <label class="field">Target sensor<select id="target-device"><option value="fsr5">FSR5 · suspect</option></select><small>Selected from project context.</small></label>
+            <label class="field">Profile<select id="profile"><option value="loopback">Core loopback</option><option value="hc_sr04">HC-SR04 · optional</option><option value="mpu6050">MPU6050 · optional</option><option value="dht11">DHT11 · optional</option></select><small>The core proof needs no external sensor.</small></label>
+            <label class="field">Evidence source<select id="mode"><option value="simulation">Simulation</option><option value="physical">Physical · reviewed profile required</option></select><small>Mode is immutable within a session.</small></label>
           </div>
-          <label class="field">Problem<textarea id="problem" rows="3">FSR5 isn't behaving like the other sensors. Find out why.</textarea></label>
-          <details class="context-disclosure"><summary>Review project context</summary><label class="field"><textarea id="project-context" class="context-editor" rows="11" spellcheck="false"></textarea><small>The agent can only use declared devices, topology, tolerances, and safe candidates.</small></label></details>
-          <label id="fixture-field" class="field">Simulation scenario<select id="fixture"><option value="fsr_outlier_compensable">FSR compensable outlier</option><option value="fsr_balanced">Healthy FSR</option><option value="fsr_noisy">Unstable signal</option><option value="fsr_read_failure">ADC/read failure</option></select></label>
-          <div class="callout"><span class="callout-dot"></span><p><strong>Physical mode remains locked by default.</strong> A reviewed board profile, wiring, ADC limits, and HC-SR04 echo protection are required.</p></div>
-          <button type="submit" class="button button-primary button-wide">Create agent session</button>
+          <label id="fixture-field" class="field">Simulation fixture<select id="fixture"></select></label>
+          <label class="field">Reported problem<textarea id="problem" rows="3">The destination waveform is missing. Determine whether the protected path is open.</textarea></label>
+          <details class="context-disclosure"><summary>Review immutable project context</summary><label class="field"><textarea id="project-context" class="context-editor" rows="13" spellcheck="false"></textarea><small>Only listed registered plans and fixed bindings are eligible.</small></label></details>
+          <div class="callout"><span class="callout-dot"></span><p><strong>Physical mode ships fail-closed.</strong> Flash a reviewed profile and explicitly confirm the fixture before execution.</p></div>
+          <button type="submit" class="button button-primary button-wide">Create evidence session</button>
         </form>
       </section>
 
       <section id="workspace" class="workspace hidden">
         <div class="investigation-header">
           <div><p class="eyebrow">Active investigation</p><h1 id="project-name">Hardware investigation</h1><p id="problem-summary" class="page-summary"></p></div>
-          <div class="session-state"><span id="lifecycle-pill" class="state-pill">Ready</span><span id="agent-source" class="source-label">Deterministic agent</span></div>
+          <div class="session-state"><span id="lifecycle-pill" class="state-pill">Ready</span><span id="agent-source" class="source-label">Deterministic selector</span></div>
         </div>
 
         <div class="agent-layout">
           <section id="agent-console" class="card agent-console" data-agent-state="IDLE" aria-live="polite">
-            <header class="agent-console-header">
-              <div class="agent-identity"><span id="agent-orb" class="agent-orb idle" aria-hidden="true"></span><div><p class="eyebrow">Agent investigation</p><h2 id="agent-state-label">Ready to investigate</h2></div></div>
-              <span id="evidence-badge" class="badge">No evidence yet</span>
-            </header>
+            <header class="agent-console-header"><div class="agent-identity"><span id="agent-orb" class="agent-orb idle" aria-hidden="true"></span><div><p class="eyebrow">Agent investigation</p><h2 id="agent-state-label">Ready</h2></div></div><span id="evidence-badge" class="badge">No evidence</span></header>
+            <div class="agent-narrative"><p id="agent-message" class="agent-message">The first experiment observes the destination node.</p><p id="agent-detail" class="agent-detail">The backend controls eligibility, evidence, confidence, and lifecycle.</p></div>
 
-            <div class="agent-narrative">
-              <p id="agent-message" class="agent-message">I’ll compare FSR5 against the four known-good sensors and stop when the evidence is sufficient.</p>
-              <p id="agent-detail" class="agent-detail">No experiment is running.</p>
+            <div class="telemetry-strip">
+              <div><span>Selected plan</span><strong id="selected-plan">—</strong></div><div><span>Evidence state</span><strong id="evidence-state">—</strong></div><div><span>Confidence</span><strong id="confidence-inline">UNKNOWN</strong></div><div><span>Experiments</span><strong id="experiment-count">0</strong></div><div><span>Verification</span><strong id="verification-count">0 / 2</strong></div><div><span>Registry</span><strong id="registry-digest">—</strong></div>
             </div>
 
-            <section id="experiment-view" class="experiment-view">
-              <div class="telemetry-strip">
-                <div><span id="current-label">Current</span><strong id="current-value">—</strong></div>
-                <div><span id="baseline-label">Baseline</span><strong id="baseline-value">—</strong></div>
-                <div><span id="delta-label">Change</span><strong id="delta-value">—</strong></div>
-                <div><span id="elapsed-label">Elapsed</span><strong id="elapsed-time">0.0 s</strong></div>
-                <div><span id="samples-label">Samples</span><strong id="sample-count">0</strong></div>
-                <div><span id="signal-label">Signal</span><strong id="signal-quality">Waiting</strong></div>
-              </div>
-              <div class="diagnostic-grid">
-                <div class="graph-region">
-                  <div class="state-graph">
-                    <div class="graph-labels"><span id="graph-title">Sensor response</span><span id="graph-mode">Waiting for readings</span></div>
-                    <canvas id="state-graph" aria-label="State-aware sensor response graph"></canvas>
-                    <div id="graph-empty" class="graph-empty">Waiting for investigation</div>
-                  </div>
-                  <div id="graph-legend" class="graph-legend"></div>
-                </div>
+            <div class="diagnostic-grid">
+              <div class="graph-region"><div class="state-graph"><div class="graph-labels"><span>Latest observed nodes</span><span id="graph-mode">Waiting</span></div><canvas id="state-graph" aria-label="Source and destination waveform"></canvas><div id="graph-empty" class="graph-empty">Run a registered experiment to view its trace</div></div><div id="graph-legend" class="graph-legend"><span><i class="legend-line"></i>Destination</span></div></div>
+              <section id="analysis-view" class="analysis-view">
+                <div class="analysis-columns"><div><p class="eyebrow">OBSERVED</p><div id="observed" class="statement-list"></div></div><div><p class="eyebrow">INFERENCE</p><div id="inference" class="statement-list"></div></div></div>
+                <div class="analysis-columns"><div><p class="eyebrow">Hypotheses</p><div id="hypotheses" class="hypothesis-list"></div></div><div><p class="eyebrow">VERIFICATION</p><div id="verification" class="statement-list"></div></div></div>
+              </section>
+            </div>
 
-                <section id="analysis-view" class="analysis-view hidden">
-                  <div id="analysis-summary" class="analysis-summary"></div>
-                  <div class="analysis-columns"><div><p class="eyebrow">What the evidence establishes</p><div id="evidence-facts" class="evidence-facts"></div></div><div><p class="eyebrow">Competing explanations</p><div id="hypotheses" class="hypothesis-list"></div></div></div>
-                  <div id="project-checks" class="project-checks hidden"></div>
-                </section>
-              </div>
-            </section>
-
-            <div id="recommendation" class="recommendation-stack"></div>
-
+            <section id="recommendation" class="recommendation-stack"></section>
             <footer class="agent-actions">
               <button id="start-investigation" class="button button-primary" type="button">Start investigation</button>
-              <button id="retry-investigation" class="button button-secondary hidden" type="button">Try measurement again</button>
-              <div id="intervention-action" class="intervention-action hidden"><label class="field">Physical change<input id="intervention" value="Replaced the divider resistor with the recommended candidate"></label><button id="declare" class="button button-primary" type="button">I’ve made this change — verify</button></div>
-              <button id="download-report" class="button button-ghost hidden" type="button">Download evidence report</button>
+              <div id="execute-action" class="action-cluster hidden"><label class="check-label"><input id="setup-confirmed" type="checkbox"> Fixture matches the declared setup</label><button id="execute" class="button button-primary" type="button">Run selected experiment</button></div>
+              <div id="intervention-action" class="intervention-action hidden"><label class="field">Human intervention<input id="intervention" value="Powered down and restored the removable jumper"></label><label class="check-label"><input id="safety-confirmed" type="checkbox"> I powered down and followed the safety constraints</label><button id="declare" class="button button-primary" type="button">Declare change and verify</button></div>
+              <button id="download-report" class="button button-ghost" type="button">Download evidence report</button>
             </footer>
           </section>
 
           <aside class="session-sidebar">
-            <section class="card compact-card"><div class="card-header"><div><p class="eyebrow">Project context</p><h2 id="context-title">Pressure-sensitive floor</h2></div></div><div id="context-facts" class="compact-facts"></div></section>
-            <section class="card compact-card"><div class="card-header"><div><p class="eyebrow">Hardware</p><h2 id="hardware-title">Waiting for session</h2></div><span id="hardware-health" class="status-dot"></span></div><div id="hardware-facts" class="compact-facts"></div></section>
-            <section class="card compact-card"><div class="card-header"><div><p class="eyebrow">Evidence collected</p><h2 id="evidence-count">0 controlled samples</h2></div><span id="confidence" class="badge">Unknown</span></div><div id="evidence-progress" class="evidence-progress"></div></section>
-            <details class="card compact-card timeline-card"><summary><span><span class="eyebrow">Activity</span><strong>View investigation log</strong></span><span id="event-count" class="badge">0</span></summary><div id="timeline" class="timeline"></div></details>
+            <section class="card compact-card"><div class="card-header"><div><p class="eyebrow">Project context</p><h2 id="context-title">—</h2></div></div><div id="context-facts" class="compact-facts"></div></section>
+            <section class="card compact-card"><div class="card-header"><div><p class="eyebrow">Capability registry</p><h2 id="hardware-title">—</h2></div><span id="hardware-health" class="status-dot"></span></div><div id="hardware-facts" class="compact-facts"></div><div id="plan-list" class="plan-list"></div></section>
+            <details class="card compact-card timeline-card" open><summary><span><span class="eyebrow">Audit trail</span><strong>Session events</strong></span><span id="event-count" class="badge">0</span></summary><div id="timeline" class="timeline"></div></details>
           </aside>
         </div>
       </section>
     </main>
-
     <div id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="/app.js"></script>
   </body>

@@ -1,38 +1,34 @@
 # Delivery roadmap
 
-## Phase 0 — Sensor-first simulation MVP
+## Phase 0 — Capability-first simulation
 
-- Versioned project context and built-in device modules
-- Adaptive semantic experiment selection
-- FSR reference/outlier evidence and bounded candidate analysis
-- Human intervention and repeated verification
-- Strict provenance, audit timeline, and safe-disabled firmware
+- Versioned project context and firmware capability registry
+- Destination-first adaptive loopback investigation
+- Deterministic evidence and confidence labels
+- Correct normal, inconclusive, diagnosis, intervention, and verification paths
+- Strict provenance and physical/simulation isolation
 
-Exit gate: `npm run check` passes; balanced, outlier, noisy, and read-failure fixtures diverge; arbitrary hardware/candidate inputs fail closed; simulation cannot claim physical confirmation.
+Exit gate: TypeScript build and deterministic tests pass; all loopback evidence fixtures branch differently; unsafe protocol inputs fail closed; simulation cannot produce physical confirmation.
 
-## Phase 1 — Physical sensor bench
+## Phase 1 — Physical loopback proof
 
-- Reviewed ESP32 profile and exact FSR circuit
-- MPU6050, DHT11, HC-SR04, and FSR serial measurements
-- HC-SR04 echo protection and ADC characterization
-- Hardware-in-loop failure, timeout, reset, and provenance evidence
+- Reviewed ESP32-S3 profile and protected GPIO4/GPIO5/GPIO6 fixture
+- Hardware-in-loop intact-path and hidden removable-jumper trials
+- Timeout, abort, disconnect, restart, output-low, and provenance evidence
+- Two consecutive physical post-intervention verification passes
 
-Exit gate: firmware build/native tests pass and physical results are recorded without overstating measurement meaning.
+Exit gate: firmware and native safety tests pass, the registered capability handshake matches context, and retained physical reports satisfy the PRD without overstating timebase accuracy.
 
-## Phase 2 — Physical FSR tuning demo
+## Phase 2 — Optional profile demonstrations
 
-- Repeatable stimulus procedure
-- Four reference sensors plus one subject
-- Evidence-backed candidate, human replacement, and two passing physical verification trials
+- HC-SR04 trigger/echo, timeout, variance, progression, and alignment evidence
+- MPU6050 identity, stationary baseline, motion, bias, noise, drift, and axis consistency
+- DHT11 response timing, checksum, stale-rate, valid-rate, temperature, and humidity
 
-Exit gate: repeated demonstrations succeed and reports preserve stimulus/circuit limitations.
-
-## Phase 3 — Optional actuators
-
-- Servo only after reviewed power and observable response
-- Relay only after a reviewed driver/flyback circuit and observable external effect
-- Motor only if a motor/driver is actually available; MPU evidence remains an indirect motion signature
+Exit gate: every profile uses the same core gateway, provenance, evidence separation, lifecycle, and confirmation policy, with its electrical review recorded.
 
 ## Later
 
-- Automated resistor network, optional external instruments, durable migrations, observability, and module distribution ecosystem.
+- Independently reviewed external reference instruments
+- Isolated analog front ends and additional digital buses
+- Durable schema migrations, observability, signed module distribution, and reproducible hardware-in-loop fixtures

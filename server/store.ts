@@ -28,7 +28,7 @@ export class JsonStore {
   async loadSession(id: string): Promise<DiagnosisSession | undefined> {
     try {
       const parsed: unknown = JSON.parse(await readFile(this.sessionPath(id), "utf8"));
-      if (!parsed || typeof parsed !== "object" || !("schemaVersion" in parsed)) throw new Error("Legacy session schema is unsupported; preserve the file for audit and create a new session.");
+      if (!parsed || typeof parsed !== "object" || !("schemaVersion" in parsed) || (parsed as { schemaVersion?: unknown }).schemaVersion !== 3) throw new Error("Legacy session schema is unsupported; preserve the file for audit and create a new session.");
       storedSessionHeaderSchema.parse(parsed);
       return parsed as DiagnosisSession;
     } catch (error) {

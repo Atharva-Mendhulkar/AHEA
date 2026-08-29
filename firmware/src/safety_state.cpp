@@ -7,7 +7,7 @@ StartResult SafetyMachine::start(OperationClass kind, uint32_t now_ms, bool oper
   if (estop_latched_) return StartResult::Estopped;
   if (state_ == SafetyState::Running) return StartResult::Busy;
   if (state_ != SafetyState::Armed) return StartResult::NotArmed;
-  if (kind == OperationClass::Actuation && !operation_enabled) return StartResult::OperationDisabled;
+  if (kind == OperationClass::BoundedOutput && !operation_enabled) return StartResult::OperationDisabled;
   if (operations_ >= operation_limit_) return StartResult::BudgetExhausted;
   operations_++; started_at_ms_ = now_ms; timed_out_ = false; state_ = SafetyState::Running; return StartResult::Accepted;
 }

@@ -11,7 +11,7 @@ int main() {
   assert(safety.running());
   assert(safety.tick(50));
   safety.finish();
-  assert(safety.start(OperationClass::Actuation, 60, false) == StartResult::OperationDisabled);
+  assert(safety.start(OperationClass::BoundedOutput, 60, false) == StartResult::OperationDisabled);
   assert(safety.start(OperationClass::TimedIo, 60) == StartResult::Accepted);
   assert(!safety.tick(161));
   assert(safety.timedOut());

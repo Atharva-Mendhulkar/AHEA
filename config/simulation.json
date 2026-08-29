@@ -1,4 +1,4 @@
 {
-  "defaultFixture": "fsr_outlier_compensable",
-  "fixtures": ["fsr_balanced", "fsr_outlier_compensable", "fsr_noisy", "fsr_read_failure"]
+  "defaultFixture": "loopback_open",
+  "fixtures": ["loopback_intact", "loopback_open", "loopback_distorted", "loopback_stimulus_fault", "loopback_conflicting", "loopback_verification_failure", "sensor_normal", "sensor_fault"]
 }
