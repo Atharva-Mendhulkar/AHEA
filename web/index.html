@@ -4,117 +4,148 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="AHEA bounded hardware diagnostic agent">
-    <title>AHEA Hardware Agent</title>
+    <script>
+      document.documentElement.dataset.theme = localStorage.getItem("ahea-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    </script>
+    <title>AHEA — Hardware Agent</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Adaptive Hardware Evidence Agent</p>
-        <h1>Motor path investigator</h1>
-      </div>
-      <div class="status-row">
-        <span id="mode-badge" class="badge simulation">SIMULATION</span>
-        <span id="connection-badge" class="badge neutral">NOT CONNECTED</span>
-        <button id="estop" class="danger" disabled>Emergency stop</button>
+    <header class="app-bar">
+      <a class="brand" href="#" aria-label="AHEA home"><span class="brand-mark">A</span><span>AHEA</span></a>
+      <div class="breadcrumb" aria-label="Current location"><span>Workbench</span><span aria-hidden="true">/</span><strong>Motor diagnosis</strong></div>
+      <div class="app-actions">
+        <span id="mode-badge" class="badge" data-tone="info">Simulation</span>
+        <span id="connection-badge" class="badge" data-tone="neutral">Not connected</span>
+        <button id="theme-toggle" class="button button-ghost button-compact" type="button" aria-label="Switch color theme"><span class="theme-mark" aria-hidden="true"></span><span id="theme-label">Dark</span></button>
+        <button id="estop" class="button button-danger button-compact" type="button" disabled>Emergency stop</button>
       </div>
     </header>
 
-    <main>
-      <section id="setup" class="panel hero">
-        <div>
-          <p class="kicker">Safe by construction</p>
-          <h2>Diagnose with evidence, not guesses.</h2>
-          <p>Every motor pulse is fixed by firmware, requires approval, and becomes a provenance-stamped observation.</p>
+    <main class="shell">
+      <section id="setup" class="setup-layout">
+        <div class="setup-copy">
+          <span class="section-index">AHEA / 01</span>
+          <p class="eyebrow">Bounded hardware diagnostics</p>
+          <h1>Find the fault.<br>Prove the repair.</h1>
+          <p class="lede">An AI agent chooses the next useful experiment. Deterministic software and firmware decide what is safe—and what the evidence actually proves.</p>
+          <div class="principles" aria-label="System principles"><span>Semantic actions only</span><span>Approval before motion</span><span>Evidence retains source</span></div>
         </div>
-        <form id="start-form">
-          <label>Evidence source
-            <select id="mode">
-              <option value="simulation">Simulation</option>
-              <option value="physical">Physical (safe-locked)</option>
-            </select>
+
+        <form id="start-form" class="card setup-card">
+          <div class="card-header">
+            <div><p class="eyebrow">New investigation</p><h2>Configure session</h2></div>
+            <span class="step-chip">01</span>
+          </div>
+          <div class="field-row">
+            <label class="field">Evidence source
+              <select id="mode"><option value="simulation">Simulation</option><option value="physical">Physical — safe locked</option></select>
+              <small>Source cannot change after creation.</small>
+            </label>
+            <label class="field">Fixture
+              <select id="fixture"><option value="disconnected">Disconnected motor lead</option><option value="healthy">Healthy motor</option><option value="stalled">Mechanical stall</option><option value="sensor_failure">Sensor failure</option></select>
+              <small>Simulation data is always labeled.</small>
+            </label>
+          </div>
+          <label class="field">Reported problem
+            <textarea id="problem" rows="4">The motor is supposed to run, but nothing is moving. Diagnose it.</textarea>
           </label>
-          <label>Simulation fixture
-            <select id="fixture">
-              <option value="disconnected">Disconnected motor lead</option>
-              <option value="healthy">Healthy motor</option>
-              <option value="stalled">Mechanical stall</option>
-              <option value="sensor_failure">Sensor failure</option>
-            </select>
-          </label>
-          <label>Reported problem
-            <textarea id="problem" rows="3">The motor is supposed to run, but nothing is moving. Diagnose it.</textarea>
-          </label>
-          <button type="submit" class="primary">Start investigation</button>
+          <div class="callout"><span class="callout-dot" aria-hidden="true"></span><p><strong>Physical mode is disabled.</strong> A reviewed hardware profile, matching calibration, e-stop, and protected supply are required.</p></div>
+          <button type="submit" class="button button-primary button-wide">Start investigation</button>
         </form>
       </section>
 
       <section id="workspace" class="workspace hidden">
-        <div class="metric-strip">
-          <div><span>Lifecycle</span><strong id="lifecycle">—</strong></div>
-          <div><span>Activations</span><strong id="budget">0 / 6</strong></div>
-          <div><span>Verification</span><strong id="verification">0 / 2 consecutive</strong></div>
-          <div><span>Agent source</span><strong id="agent-source">—</strong></div>
+        <div class="page-heading">
+          <div><p class="eyebrow">Active workspace</p><h1>Motor diagnosis</h1><p id="problem-summary" class="page-summary">Investigating the reported hardware behavior.</p></div>
+          <span id="lifecycle-pill" class="state-pill">Ready</span>
         </div>
+        <nav class="section-nav" aria-label="Workspace pages" role="tablist">
+          <button class="section-tab active" type="button" role="tab" aria-selected="true" aria-controls="view-evidence" data-view="evidence">Evidence</button>
+          <button class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="view-hypotheses" data-view="hypotheses">Hypotheses</button>
+          <button class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="view-timeline" data-view="timeline">Timeline</button>
+          <button class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="view-report" data-view="report">Report</button>
+        </nav>
 
-        <div class="grid">
-          <section class="panel observation-card">
-            <p class="kicker">Current observation</p>
-            <h2 id="observation-title">Awaiting evidence</h2>
-            <div id="measurements" class="measurements"></div>
-          </section>
+        <section class="metrics" aria-label="Session status">
+          <div class="metric"><span>Lifecycle</span><strong id="lifecycle">—</strong><small>Coordinator owned</small></div>
+          <div class="metric"><span>Activations</span><strong id="budget">0 / 6</strong><small>Accepted pulses</small></div>
+          <div class="metric"><span>Verification</span><strong id="verification">0 / 2</strong><small>Consecutive passes</small></div>
+          <div class="metric"><span>Decision source</span><strong id="agent-source">—</strong><small id="agent-proof">Not yet evaluated</small></div>
+        </section>
 
-          <section class="panel decision-card">
-            <p class="kicker">Agent's next experiment</p>
-            <h2 id="decision-title">No experiment pending</h2>
-            <p id="decision-rationale" class="rationale">The coordinator is evaluating available evidence.</p>
-            <div id="approval-facts" class="approval-facts"></div>
-            <button id="approve" class="primary" disabled>Approve bounded activation</button>
-          </section>
-
-          <section class="panel hypotheses-card">
-            <div class="section-heading">
-              <div><p class="kicker">Deterministic evidence</p><h2>Competing hypotheses</h2></div>
-              <span id="confidence" class="confidence">UNKNOWN</span>
+        <div class="page-stage">
+          <section id="view-evidence" class="workspace-page active" role="tabpanel" data-page="evidence">
+            <div class="dashboard-grid">
+              <section class="card card-span-7">
+                <div class="card-header"><div><p class="eyebrow">Current observation</p><h2 id="observation-title">Awaiting evidence</h2></div><span id="observation-source" class="badge" data-tone="neutral">No source</span></div>
+                <div id="measurements" class="measurement-grid"></div>
+              </section>
+              <section class="card card-span-5 action-card">
+                <div class="card-header"><div><p class="eyebrow">Next safe action</p><h2 id="decision-title">No experiment pending</h2></div><span class="step-chip">02</span></div>
+                <p id="decision-rationale" class="muted">The coordinator is evaluating available evidence.</p>
+                <div id="approval-facts" class="fact-list"></div>
+                <button id="approve" class="button button-primary button-wide" type="button" disabled>Approve bounded activation</button>
+              </section>
+              <section class="card card-span-6 plot-card">
+                <div class="card-header"><div><p class="eyebrow">MPU6050 stream</p><h2>Motion signature</h2></div><span id="motion-reading" class="live-reading">— g</span></div>
+                <div class="plot-wrap"><canvas id="motion-plot" aria-label="Motion sensor serial plot"></canvas><span class="plot-empty" id="motion-empty">Waiting for motion samples</span></div>
+                <div class="plot-axis"><span>0 ms</span><span id="motion-duration">—</span></div>
+              </section>
+              <section class="card card-span-6 plot-card">
+                <div class="card-header"><div><p class="eyebrow">INA219 stream</p><h2>Motor current</h2></div><span id="current-reading" class="live-reading">— mA</span></div>
+                <div class="plot-wrap"><canvas id="current-plot" aria-label="Current sensor serial plot"></canvas><span class="plot-empty" id="current-empty">Waiting for current samples</span></div>
+                <div class="plot-axis"><span>0 ms</span><span id="current-duration">—</span></div>
+              </section>
+              <section class="card card-span-12 intervention-card">
+                <div><p class="eyebrow">Human checkpoint</p><h2>Declare the repair</h2><p class="muted">Verification remains locked until you record the physical intervention.</p></div>
+                <label class="field">What changed?<input id="intervention" value="Reconnected the motor lead"></label>
+                <button id="declare" class="button button-secondary" type="button" disabled>Declare repair</button>
+              </section>
             </div>
-            <div id="hypotheses"></div>
           </section>
 
-          <section class="panel intervention-card">
-            <p class="kicker">Human intervention</p>
-            <h2>Repair checkpoint</h2>
-            <p>Declare what changed before verification begins.</p>
-            <div class="inline-form">
-              <input id="intervention" value="Reconnected the motor lead" aria-label="Intervention description">
-              <button id="declare" disabled>Declare repair</button>
+          <section id="view-hypotheses" class="workspace-page" role="tabpanel" data-page="hypotheses" hidden>
+            <div class="dashboard-grid">
+              <section class="card card-span-8 hypotheses-main">
+                <div class="card-header"><div><p class="eyebrow">Deterministic evidence</p><h2>Competing hypotheses</h2></div><span id="confidence" class="badge" data-tone="warning">Unknown</span></div>
+                <div id="hypotheses" class="hypothesis-list"></div>
+              </section>
+              <aside class="card card-span-4 system-card">
+                <div class="card-header"><div><p class="eyebrow">System</p><h2>Hardware profile</h2></div><span class="step-chip">03</span></div>
+                <dl id="hardware-facts" class="definition-list"></dl>
+              </aside>
+              <section class="card card-span-12 reasoning-note">
+                <p class="eyebrow">Interpretation boundary</p>
+                <p>The agent proposes what to test. Only calibrated, deterministic rules change evidence labels and confirmation state.</p>
+              </section>
             </div>
           </section>
 
-          <section class="panel timeline-card">
-            <p class="kicker">Audit trail</p>
-            <h2>Experiment timeline</h2>
-            <ol id="timeline"></ol>
+          <section id="view-timeline" class="workspace-page" role="tabpanel" data-page="timeline" hidden>
+            <section class="card timeline-page">
+              <div class="card-header"><div><p class="eyebrow">Audit trail</p><h2>Experiment timeline</h2></div><span id="event-count" class="badge" data-tone="neutral">0 events</span></div>
+              <ol id="timeline" class="timeline"></ol>
+            </section>
           </section>
 
-          <section class="panel report-card">
-            <p class="kicker">Diagnosis report</p>
-            <h2 id="report-title">Investigation in progress</h2>
-            <div id="report"></div>
+          <section id="view-report" class="workspace-page" role="tabpanel" data-page="report" hidden>
+            <section class="card report-card">
+              <div class="card-header"><div><p class="eyebrow">Diagnosis report</p><h2 id="report-title">Investigation in progress</h2></div><button id="download-report" class="button button-ghost button-compact" type="button" disabled>Download JSON</button></div>
+              <div id="report" class="report-grid"></div>
+            </section>
           </section>
         </div>
       </section>
     </main>
 
-    <dialog id="approval-dialog">
-      <form method="dialog">
-        <p class="kicker">Physical action approval</p>
-        <h2 id="dialog-title">Approve experiment</h2>
-        <div id="dialog-facts"></div>
-        <p class="warning">Keep hands clear. Emergency stop remains available throughout the pulse.</p>
-        <div class="dialog-actions">
-          <button value="cancel">Cancel</button>
-          <button id="confirm-approval" value="default" class="primary">Approve and execute</button>
-        </div>
+    <dialog id="approval-dialog" aria-labelledby="dialog-title">
+      <form method="dialog" class="dialog-content">
+        <div class="dialog-handle" aria-hidden="true"></div>
+        <p class="eyebrow">Physical action approval</p><h2 id="dialog-title">Approve experiment</h2><p class="muted">Review the firmware-fixed limits before allowing this activation.</p>
+        <div id="dialog-facts" class="fact-list boxed"></div>
+        <div class="callout warning"><span class="callout-dot" aria-hidden="true"></span><p>Keep hands clear. Emergency stop remains available throughout the pulse.</p></div>
+        <div class="dialog-actions"><button value="cancel" class="button button-secondary">Cancel</button><button id="confirm-approval" value="default" class="button button-primary">Approve and execute</button></div>
       </form>
     </dialog>
 

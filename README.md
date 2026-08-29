@@ -14,6 +14,7 @@ The repository is simulation-ready. Physical mode intentionally ships **disabled
 - Two consecutive post-repair verification passes before `CONFIRMED`
 - Firmware-local timeout, cooldown, budgets, current trip, deduplication, and latched e-stop
 - Visible deterministic fallback when the OpenAI API is unavailable
+- Responsive wireframe dashboard with shadcn-inspired controls, persistent light/dark themes, separate workspace views, and animated observation plotters
 
 ## Architecture
 
@@ -59,6 +60,8 @@ shared/                  Domain types and strict runtime schemas
 tests/                   Backend, API, protocol, and optional live-model tests
 web/                     Dependency-light dashboard
 ```
+
+The dashboard deliberately stays framework-free to preserve the MVP's no-React constraint. Its component styling follows shadcn conventions—neutral tokens, compact controls, restrained radii, clear focus states, and semantic status variants—without importing React components.
 
 ## Quick start
 

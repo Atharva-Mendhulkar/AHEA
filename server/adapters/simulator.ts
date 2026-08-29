@@ -53,6 +53,7 @@ export class SimulatorAdapter implements HardwareAdapter {
     const motionDetected = effectiveFixture === "healthy";
     const currentMean = effectiveFixture === "healthy" ? 181 : effectiveFixture === "stalled" ? 430 : 2.4;
     const measurements: Measurement[] = [];
+    const series: Observation["series"] = [];
     const health: SensorHealth[] = [];
 
     if (command === "scan_i2c") {
@@ -68,6 +69,13 @@ export class SimulatorAdapter implements HardwareAdapter {
         { name: "expected_motion_signature_detected", value: motionDetected, unit: "boolean", sensor: "mpu6050", quality: sensorFailed ? "invalid" : "valid" },
       );
       health.push({ sensor: "mpu6050", healthy: !sensorFailed, errorRate: sensorFailed ? 0.25 : 0, detail: sensorFailed ? "Simulated I2C read errors" : undefined });
+      series.push({
+        name: "motion_rms_g",
+        unit: "g",
+        sensor: "mpu6050",
+        sampleIntervalMs: 8,
+        values: makeTrace(72, motionDetected ? 0.18 : 0.012, motionDetected ? 0.095 : 0.005, sensorFailed ? 0.02 : 0.003),
+      });
     }
     if (command === "motor_current_probe" || command === "verify_motor") {
       measurements.push(
@@ -76,6 +84,13 @@ export class SimulatorAdapter implements HardwareAdapter {
         { name: "idle_delta_ma", value: currentMean - 2.5, unit: "mA", sensor: "ina219", quality: sensorFailed ? "invalid" : "valid" },
       );
       health.push({ sensor: "ina219", healthy: !sensorFailed, errorRate: sensorFailed ? 0.25 : 0 });
+      series.push({
+        name: "current_ma",
+        unit: "mA",
+        sensor: "ina219",
+        sampleIntervalMs: 8,
+        values: makeTrace(72, currentMean, effectiveFixture === "healthy" ? 18 : effectiveFixture === "stalled" ? 35 : 0.8, sensorFailed ? 12 : 0.6),
+      });
     }
     if (command === "emergency_stop") {
       measurements.push({ name: "estop_latched", value: true, unit: "boolean", sensor: "firmware", quality: "valid" });
@@ -93,6 +108,7 @@ export class SimulatorAdapter implements HardwareAdapter {
       deviceUptimeMs: Date.now() - this.startedAt,
       elapsedMs: Math.max(Date.now() - started, activation ? 153 : 5),
       measurements,
+      series,
       sensorHealth: health,
       safety: {
         activationAccepted: activation && !this.estopLatched,
@@ -104,4 +120,12 @@ export class SimulatorAdapter implements HardwareAdapter {
       calibrationId: context.calibration.id,
     };
   }
+}
+
+function makeTrace(length: number, center: number, amplitude: number, noise: number): number[] {
+  return Array.from({ length }, (_, index) => {
+    const harmonic = Math.sin(index * 0.58) * amplitude + Math.sin(index * 1.73) * amplitude * 0.28;
+    const deterministicNoise = Math.sin(index * 4.17) * noise;
+    return Math.max(0, Number((center + harmonic + deterministicNoise).toFixed(4)));
+  });
 }

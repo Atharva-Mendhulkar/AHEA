@@ -15,4 +15,19 @@ describe("strict schemas", () => {
   it("requires explicit response safety and sensor health", () => {
     expect(() => protocolResponseSchema.parse({ id: "x", ok: true, data: { elapsedMs: 1, measurements: [] }, error: null })).toThrow();
   });
+
+  it("accepts bounded sensor sample series for the plotter", () => {
+    expect(protocolResponseSchema.parse({
+      id: "x",
+      ok: true,
+      data: {
+        elapsedMs: 16,
+        measurements: [],
+        series: [{ name: "current_ma", unit: "mA", sensor: "ina219", sampleIntervalMs: 8, values: [2.4, 2.5] }],
+        sensorHealth: [{ sensor: "ina219", healthy: true, errorRate: 0 }],
+        safety: { activationAccepted: true, tripped: false, estopLatched: false, timeout: false, reasons: [] },
+      },
+      error: null,
+    }).data?.series?.[0]?.values).toEqual([2.4, 2.5]);
+  });
 });

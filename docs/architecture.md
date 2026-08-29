@@ -12,6 +12,8 @@ The system is a modular monolith on the laptop and a separate deterministic firm
 6. The evidence engine derives hypothesis support and confidence without model input.
 7. The coordinator records the result and requests a fresh decision.
 
+The dashboard keeps Evidence, Hypotheses, Timeline, and Report as separate in-app views. The Evidence view animates only sample arrays carried by canonical observations; it does not fabricate physical readings in the browser.
+
 ## Runtime data flow
 
 ```mermaid

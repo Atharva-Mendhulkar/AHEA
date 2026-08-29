@@ -118,6 +118,7 @@ export class SerialAdapter implements HardwareAdapter {
       deviceUptimeMs: response.data.deviceUptimeMs,
       elapsedMs: response.data.elapsedMs,
       measurements: response.data.measurements,
+      series: response.data.series,
       sensorHealth: response.data.sensorHealth,
       safety: response.data.safety,
       calibrationId: context.calibration.id,

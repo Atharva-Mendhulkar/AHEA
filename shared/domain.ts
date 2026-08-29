@@ -44,6 +44,14 @@ export interface SafetyResult {
   reasons: string[];
 }
 
+export interface MeasurementSeries {
+  name: "motion_rms_g" | "current_ma";
+  unit: "g" | "mA";
+  sensor: "mpu6050" | "ina219";
+  sampleIntervalMs: number;
+  values: number[];
+}
+
 export interface Observation {
   id: string;
   sessionId: string;
@@ -55,6 +63,7 @@ export interface Observation {
   deviceUptimeMs?: number;
   elapsedMs: number;
   measurements: Measurement[];
+  series?: MeasurementSeries[];
   sensorHealth: SensorHealth[];
   safety: SafetyResult;
   calibrationId: string;

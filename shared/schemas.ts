@@ -66,6 +66,14 @@ const sensorHealthSchema = z.object({
   detail: z.string().optional(),
 }).strict();
 
+const measurementSeriesSchema = z.object({
+  name: z.enum(["motion_rms_g", "current_ma"]),
+  unit: z.enum(["g", "mA"]),
+  sensor: z.enum(["mpu6050", "ina219"]),
+  sampleIntervalMs: z.number().positive(),
+  values: z.array(z.number()).max(256),
+}).strict();
+
 export const protocolResponseSchema = z.object({
   id: z.string(),
   ok: z.boolean(),
@@ -73,6 +81,7 @@ export const protocolResponseSchema = z.object({
     deviceUptimeMs: z.number().nonnegative().optional(),
     elapsedMs: z.number().nonnegative(),
     measurements: z.array(measurementSchema),
+    series: z.array(measurementSeriesSchema).optional(),
     sensorHealth: z.array(sensorHealthSchema),
     safety: z.object({
       activationAccepted: z.boolean(),

@@ -11,6 +11,8 @@ constexpr char FIRMWARE_VERSION[] = "0.1.0";
 constexpr char PROTOCOL_VERSION[] = "1.0";
 constexpr uint8_t MPU6050_ADDRESS = 0x68;
 constexpr uint8_t INA219_ADDRESS = 0x40;
+constexpr uint16_t TRACE_CAPACITY = 48;
+constexpr uint16_t SAMPLE_INTERVAL_MS = 8;
 
 ahea::SafetyMachine safety(
     ahea::profile::PULSE_DURATION_MS,
@@ -34,6 +36,11 @@ uint32_t sensor_errors = 0;
 float current_sum_ma = 0;
 float current_peak_ma = 0;
 double accel_square_sum = 0;
+float current_trace[TRACE_CAPACITY] = {};
+float motion_trace[TRACE_CAPACITY] = {};
+uint16_t trace_count = 0;
+uint32_t last_sample_ms = 0;
+float last_current_ma = 0;
 
 void motorOff() {
   if constexpr (ahea::profile::PHYSICAL_ENABLED) {
@@ -132,6 +139,7 @@ JsonDocument baseSuccess(const String& id, bool activation_accepted, uint32_t el
   data["deviceUptimeMs"] = millis();
   data["elapsedMs"] = elapsed_ms;
   data["measurements"].to<JsonArray>();
+  data["series"].to<JsonArray>();
   data["sensorHealth"].to<JsonArray>();
   JsonObject result = data["safety"].to<JsonObject>();
   result["activationAccepted"] = activation_accepted;
@@ -223,6 +231,9 @@ void startProbe(const String& id, const String& command) {
   current_sum_ma = 0;
   current_peak_ma = 0;
   accel_square_sum = 0;
+  trace_count = 0;
+  last_sample_ms = 0;
+  last_current_ma = 0;
   motorOn();
 }
 
@@ -244,6 +255,25 @@ void finishProbe() {
     addMeasurement(measurements, "current_mean_ma", current_mean, "mA", "ina219", healthy);
     addMeasurement(measurements, "current_peak_ma", current_peak_ma, "mA", "ina219", healthy);
     addHealth(health, "ina219", healthy, error_rate);
+  }
+  JsonArray series = response["data"]["series"].as<JsonArray>();
+  if (active_command != "motor_current_probe") {
+    JsonObject motion_series = series.add<JsonObject>();
+    motion_series["name"] = "motion_rms_g";
+    motion_series["unit"] = "g";
+    motion_series["sensor"] = "mpu6050";
+    motion_series["sampleIntervalMs"] = SAMPLE_INTERVAL_MS;
+    JsonArray values = motion_series["values"].to<JsonArray>();
+    for (uint16_t i = 0; i < trace_count; i++) values.add(motion_trace[i]);
+  }
+  if (active_command != "motor_motion_probe") {
+    JsonObject current_series = series.add<JsonObject>();
+    current_series["name"] = "current_ma";
+    current_series["unit"] = "mA";
+    current_series["sensor"] = "ina219";
+    current_series["sampleIntervalMs"] = SAMPLE_INTERVAL_MS;
+    JsonArray values = current_series["values"].to<JsonArray>();
+    for (uint16_t i = 0; i < trace_count; i++) values.add(current_trace[i]);
   }
   sendAndRemember(response);
   active_id = "";
@@ -347,6 +377,13 @@ void loop() {
   if (!active_id.isEmpty() && !safety.motorEnabled()) {
     finishProbe();
   } else if (!active_id.isEmpty() && safety.motorEnabled()) {
+    const uint32_t now_ms = millis();
+    if (last_sample_ms != 0 && now_ms - last_sample_ms < SAMPLE_INTERVAL_MS) {
+      safety.tick(now_ms, last_current_ma, ahea::profile::ABSOLUTE_CURRENT_LIMIT_MA,
+                  digitalRead(ahea::profile::ESTOP_PIN) == LOW);
+      return;
+    }
+    last_sample_ms = now_ms;
     float current_ma = ina_ready ? ina219.getCurrent_mA() : 0;
     float acceleration_g = 0;
     const bool motion_ok = active_command == "motor_current_probe" || readAccelerationMagnitude(acceleration_g);
@@ -355,15 +392,21 @@ void loop() {
     samples++;
     if (!motion_ok || !current_ok) sensor_errors++;
     if (current_ok) {
+      last_current_ma = current_ma;
       current_sum_ma += current_ma;
       current_peak_ma = max(current_peak_ma, current_ma);
     }
     if (motion_ok) accel_square_sum += acceleration_g * acceleration_g;
+    if (trace_count < TRACE_CAPACITY) {
+      current_trace[trace_count] = current_ma;
+      motion_trace[trace_count] = acceleration_g;
+      trace_count++;
+    }
     if (!motion_ok || !current_ok) {
       safety.fault();
       motorOff();
       finishProbe();
-    } else if (!safety.tick(millis(), current_ma, ahea::profile::ABSOLUTE_CURRENT_LIMIT_MA,
+    } else if (!safety.tick(now_ms, current_ma, ahea::profile::ABSOLUTE_CURRENT_LIMIT_MA,
                      digitalRead(ahea::profile::ESTOP_PIN) == LOW)) {
       finishProbe();
     }
