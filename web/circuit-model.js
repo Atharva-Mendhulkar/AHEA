@@ -5,7 +5,7 @@
 
 const leftHeader = ["3V3-1", "3V3-2", "RST", "GPIO4", "GPIO5", "GPIO6", "GPIO7", "GPIO15", "GPIO16", "GPIO17", "GPIO18", "GPIO8", "GPIO3", "GPIO46", "GPIO9", "GPIO10", "GPIO11", "GPIO12", "GPIO13", "GPIO14", "5V", "GND-J1"];
 const rightHeader = ["GND-J3-1", "TX43", "RX44", "GPIO1", "GPIO2", "GPIO42", "GPIO41", "GPIO40", "GPIO39", "GPIO38", "GPIO37", "GPIO36", "GPIO35", "GPIO0", "GPIO45", "GPIO48", "GPIO47", "GPIO21", "GPIO20", "GPIO19", "GND-J3-21", "GND-J3-22"];
-const usedEspPins = new Set(["3V3-1", "GND-J1", "GPIO4", "GPIO5", "GPIO6", "GPIO7", "GPIO8", "GPIO9", "GPIO15", "GPIO16", "GND-J3-1"]);
+const usedEspPins = new Set(["3V3-1", "GND-J1", "GPIO4", "GPIO5", "GPIO6", "GPIO7", "GPIO13", "GPIO14", "GPIO15", "GPIO16", "GND-J3-1"]);
 
 const espPins = [
   ...leftHeader.map((id, index) => ({ id, label: id.replace("GPIO", "IO"), header: `J1-${index + 1}`, x: 648, y: 298 + index * 12, used: usedEspPins.has(id) })),
@@ -53,7 +53,7 @@ export const components = [
 
 export const gpioAssignments = [
   ["ACS712 conditioned output", "GPIO4", "ADC1_CH3"], ["Voltage sensor output", "GPIO5", "ADC1_CH4"], ["DHT11 DATA", "GPIO6", "Digital"],
-  ["HC-SR04 TRIG", "GPIO7", "Digital out"], ["MPU6050 SDA", "GPIO8", "I²C SDA"], ["MPU6050 SCL", "GPIO9", "I²C SCL"],
+  ["HC-SR04 TRIG", "GPIO7", "Digital out"], ["MPU6050 SDA", "GPIO14", "I²C SDA"], ["MPU6050 SCL", "GPIO13", "I²C SCL"],
   ["HC-SR04 divided ECHO", "GPIO15", "Digital in"], ["SG90 PWM", "GPIO16", "PWM out"],
 ].map(([signal, pin, capability]) => ({ signal, pin, capability }));
 
@@ -69,8 +69,8 @@ export const wires = [
   W("w08", 1, "LOAD_5V", "hole.T+50", "hole.B+50", "5 V", "rail bridge", [[940,184],[925,184],[925,692],[940,692]], "out"),
   W("w09", 2, "3V3", "esp32.3V3-1", "mpu6050.VCC", "3.3 V", "power", [[648,298],[620,298],[620,178],[258,178],[258,166]], "out"),
   W("w10", 2, "COMMON_GND", "mpu6050.GND", "hole.T-12", "0 V", "ground", [[280,166],[280,198],[370,198]], "out"),
-  W("w11", 2, "I2C_SDA", "esp32.GPIO8", "mpu6050.SDA", "3.3 V", "I²C SDA", [[648,430],[600,430],[600,214],[324,214],[324,166]], "bidirectional"),
-  W("w12", 2, "I2C_SCL", "esp32.GPIO9", "mpu6050.SCL", "3.3 V", "I²C SCL", [[648,466],[580,466],[580,226],[302,226],[302,166]], "out"),
+  W("w11", 2, "I2C_SDA", "esp32.GPIO14", "mpu6050.SDA", "3.3 V", "I²C SDA", [[648,526],[600,526],[600,214],[324,214],[324,166]], "bidirectional"),
+  W("w12", 2, "I2C_SCL", "esp32.GPIO13", "mpu6050.SCL", "3.3 V", "I²C SCL", [[648,514],[580,514],[580,226],[302,226],[302,166]], "out"),
   W("w13", 2, "MPU_AD0", "mpu6050.AD0", "hole.T-14", "0 V", "address select", [[390,166],[390,198],[400,198]], "out"),
   W("w14", 2, "3V3", "esp32.3V3-1", "dht11.VCC", "3.3 V", "power", [[648,298],[620,298],[620,650],[95,650],[95,790]], "out"),
   W("w15", 2, "COMMON_GND", "dht11.GND", "hole.B-8", "0 V", "ground", [[185,790],[185,706],[310,706]], "out"),

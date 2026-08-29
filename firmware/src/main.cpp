@@ -3,6 +3,8 @@
 #include <DHT.h>
 #include <Wire.h>
 #include <math.h>
+#include <mbedtls/sha256.h>
+#include <esp_task_wdt.h>
 #include "hardware_profile.h"
 #include "safety_state.h"
 
@@ -10,7 +12,7 @@ namespace {
 constexpr const char* FIRMWARE_VERSION = "3.0.0";
 constexpr const char* PROTOCOL_VERSION = "3.0";
 constexpr const char* REGISTRY_VERSION = "3.0.0";
-constexpr const char* REGISTRY_DIGEST = "4f8b5a4a23d96e0a8396fb5d2155b09bd3cfaf04ecabca80e54dbb066ca5d6ea";
+String registry_digest;
 ahea::SafetyMachine safety(ahea::profile::OPERATION_TIMEOUT_MS, ahea::profile::MAX_SESSION_OPERATIONS);
 DHT dht(ahea::profile::DHT11_PIN, DHT11);
 String line_buffer;
@@ -47,7 +49,7 @@ void addPlanMeasurementDescriptors(const String& plan_id, JsonArray values) {
 
 JsonDocument baseResponse(const String& id, const String& plan_id, uint32_t started_ms) {
   JsonDocument response; response["id"] = id; response["ok"] = true; response["error"] = nullptr;
-  JsonObject data = response["data"].to<JsonObject>(); data["firmwareVersion"] = FIRMWARE_VERSION; data["boardIdentity"] = ahea::profile::BOARD_IDENTITY; data["protocolVersion"] = PROTOCOL_VERSION; data["hardwareProfileId"] = ahea::profile::PROFILE_ID; data["registryDigest"] = REGISTRY_DIGEST; data["physicalEnabled"] = ahea::profile::PHYSICAL_ENABLED; data["monotonicStartedMs"] = started_ms; data["monotonicEndedMs"] = millis(); data["sequenceNumber"] = ++sequence_number; data["planId"] = plan_id; data["bindingIds"].to<JsonArray>(); data["measurements"].to<JsonArray>(); data["series"].to<JsonArray>(); data["targetHealth"].to<JsonArray>(); data["limitations"].to<JsonArray>();
+  JsonObject data = response["data"].to<JsonObject>(); data["firmwareVersion"] = FIRMWARE_VERSION; data["boardIdentity"] = ahea::profile::BOARD_IDENTITY; data["protocolVersion"] = PROTOCOL_VERSION; data["hardwareProfileId"] = ahea::profile::PROFILE_ID; data["registryDigest"] = registry_digest; data["physicalEnabled"] = ahea::profile::PHYSICAL_ENABLED; data["monotonicStartedMs"] = started_ms; data["monotonicEndedMs"] = millis(); data["sequenceNumber"] = ++sequence_number; data["planId"] = plan_id; data["bindingIds"].to<JsonArray>(); data["measurements"].to<JsonArray>(); data["series"].to<JsonArray>(); data["targetHealth"].to<JsonArray>(); data["limitations"].to<JsonArray>();
   JsonObject operation = data["operation"].to<JsonObject>(); operation["accepted"] = true; operation["aborted"] = false; operation["timedOut"] = safety.timedOut(); operation["estopLatched"] = safety.estopLatched(); operation["cleanupSucceeded"] = true; operation["reasons"].to<JsonArray>();
   return response;
 }
@@ -57,17 +59,41 @@ void send(JsonDocument& response) { if (response["ok"].as<bool>() && response["d
 void safeOutputs() { if constexpr (ahea::profile::LOOPBACK_FIXTURE_REVIEWED) digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN, LOW); if constexpr (ahea::profile::HC_SR04_ENABLED) digitalWrite(ahea::profile::HC_SR04_TRIGGER_PIN, LOW); }
 void sendError(const String& id, const char* code, const char* message) { safeOutputs(); JsonDocument response; response["id"] = id; response["ok"] = false; response["data"] = nullptr; JsonObject error = response["error"].to<JsonObject>(); error["code"] = code; error["message"] = message; send(response); }
 
+bool pollOperationControl() {
+  while (Serial.available()) {
+    const char character = static_cast<char>(Serial.read());
+    if (character != '\n') {
+      if (line_buffer.length() < 2048) { line_buffer += character; continue; }
+      line_buffer = ""; safeOutputs(); safety.fault(); sendError("unknown", "REQUEST_TOO_LARGE", "Serial request exceeded 2048 bytes during an operation."); return true;
+    }
+    if (line_buffer.isEmpty()) continue;
+    JsonDocument request; const auto parse_result = deserializeJson(request, line_buffer); line_buffer = "";
+    const String id = request["id"].is<const char*>() ? request["id"].as<String>() : "unknown";
+    const bool exact_abort = parse_result == DeserializationError::Ok && request.is<JsonObject>() && request.as<JsonObject>().size() == 3 &&
+      !id.isEmpty() && id.length() <= 120 && request["cmd"].is<const char*>() && request["cmd"].as<String>() == "abort" &&
+      request["args"].is<JsonObject>() && request["args"].as<JsonObject>().size() == 0 && !requestSeen(id);
+    safeOutputs();
+    if (exact_abort) {
+      safety.emergencyStop(); JsonDocument response = baseResponse(id, "abort.v1", millis()); response["data"]["operation"]["aborted"] = true; send(response); return true;
+    }
+    safety.fault(); sendError(id, "BUSY", "Only a new, argument-free abort request is accepted while an operation is running."); return true;
+  }
+  return false;
+}
+bool continueOperation() { esp_task_wdt_reset(); if (pollOperationControl()) return false; if (safety.tick(millis())) return true; safeOutputs(); return false; }
+bool waitSafely(uint32_t duration_ms) { const uint32_t started = millis(); while (static_cast<uint32_t>(millis() - started) < duration_ms) { if (!continueOperation()) return false; delay(1); } return true; }
+
 void addPlan(JsonArray plans, const char* id, const char* capability, const char* type, const char* label, const char* description, const char* target_type, const char* const bindings[], size_t binding_count, const char* phase, const char* budget_class, uint32_t duration_ms, const char* cleanup, const char* limitation) {
   JsonObject item = plans.add<JsonObject>(); item["id"] = id; item["capabilityId"] = capability; item["type"] = type; item["label"] = label; item["description"] = description; item["targetType"] = target_type; item["command"] = "execute_plan"; JsonArray binding_values = item["bindingIds"].to<JsonArray>(); addStringArray(binding_values, bindings, binding_count); JsonArray phases = item["phases"].to<JsonArray>(); phases.add(phase); if (String(id) == "loopback.observe-destination.1khz.v1" || String(id) == "hc-sr04.echo-timing.v1" || String(id) == "mpu6050.identity.v1" || String(id) == "dht11.response.v1") phases.add("monitoring"); item["budgetClass"] = budget_class; item["requiresSetupConfirmation"] = true; item["durationMs"] = duration_ms; JsonObject parameters = item["fixedParameters"].to<JsonObject>(); JsonArray measurements = item["measurements"].to<JsonArray>(); item["limitations"].to<JsonArray>().add(limitation); item["cleanup"] = cleanup;
   const String plan_id(id);
   if (plan_id.startsWith("loopback.")) { if (plan_id.indexOf("static") >= 0) { parameters["waveform"] = "low-high-low"; parameters["stepDurationMs"] = 100; } else { parameters["frequencyHz"] = plan_id.indexOf("500hz") >= 0 ? 500 : 1000; parameters["dutyPercent"] = 50; parameters["durationMs"] = duration_ms; } }
   else if (plan_id.startsWith("hc-sr04.")) { parameters["triggerPulseUs"] = 10; parameters["echoTimeoutUs"] = 30000; parameters["samples"] = plan_id == "hc-sr04.echo-timing.v1" ? 8 : 12; parameters["intervalMs"] = 60; }
-  else if (plan_id.startsWith("mpu6050.")) { parameters["address"] = "profile-owned"; if (plan_id == "mpu6050.identity.v1") parameters["register"] = "WHO_AM_I"; else { parameters["samples"] = 50; parameters["sampleIntervalMs"] = 20; } }
+  else if (plan_id.startsWith("mpu6050.")) { parameters["address"] = "profile-owned"; parameters["busHz"] = ahea::profile::MPU6050_I2C_FREQUENCY_HZ; if (plan_id == "mpu6050.identity.v1") parameters["register"] = "WHO_AM_I"; else { parameters["samples"] = 50; parameters["sampleIntervalMs"] = 20; } }
   else if (plan_id.startsWith("dht11.")) { if (plan_id == "dht11.valid-rate.v1") { parameters["samples"] = 3; parameters["intervalMs"] = 2000; } else parameters["minimumReadIntervalMs"] = 2000; }
   addPlanMeasurementDescriptors(plan_id, measurements);
 }
-void addRegistry(JsonObject data) {
-  JsonObject registry = data["registry"].to<JsonObject>(); registry["schemaVersion"] = 1; registry["registryVersion"] = REGISTRY_VERSION; registry["digest"] = REGISTRY_DIGEST; registry["boardIdentity"] = ahea::profile::BOARD_IDENTITY; registry["hardwareProfileId"] = ahea::profile::PROFILE_ID; JsonArray plans = registry["plans"].to<JsonArray>();
+void populateRegistry(JsonObject registry) {
+  registry["schemaVersion"] = 1; registry["registryVersion"] = REGISTRY_VERSION; registry["boardIdentity"] = ahea::profile::BOARD_IDENTITY; registry["hardwareProfileId"] = ahea::profile::PROFILE_ID; JsonArray plans = registry["plans"].to<JsonArray>();
   const char* destination_bindings[] = {"gpio4_stimulus", "gpio6_destination_observer"};
   const char* source_bindings[] = {"gpio4_stimulus", "gpio5_source_observer"};
   const char* endpoint_bindings[] = {"gpio4_stimulus", "gpio5_source_observer", "gpio6_destination_observer"};
@@ -80,13 +106,42 @@ void addRegistry(JsonObject data) {
   addPlan(plans, "loopback.repeat-synchronized.500hz.v1", "synchronized_endpoint_capture", "repeat_synchronized_capture", "Repeat synchronized capture", "Repeat endpoint capture at registered 500 Hz.", "loopback", endpoint_bindings, 3, "diagnostic", "bounded_output", 500, "GPIO4 low", "ESP32 timebase only; not independent calibration.");
   addPlan(plans, "loopback.verify-path.1khz.v1", "synchronized_endpoint_capture", "verify_repair", "Verify restored path", "Verify source and destination after intervention.", "loopback", endpoint_bindings, 3, "verification", "bounded_output", 500, "GPIO4 low", "Physical verification applies only to tested conditions.");
   }
-  if constexpr (ahea::profile::HC_SR04_ENABLED) { const char* bindings[] = {"hc_trigger", "hc_echo_protected"}; addPlan(plans, "hc-sr04.echo-timing.v1", "ultrasonic_echo_timing", "sensor_baseline", "Measure echo timing", "Run bounded trigger and echo timing.", "hc_sr04", bindings, 2, "diagnostic", "timed_io", 500, "Trigger low", "Requires reviewed Echo level interface."); addPlan(plans, "hc-sr04.variance.v1", "ultrasonic_variance", "sensor_consistency", "Measure distance variance", "Measure repeated echo variance.", "hc_sr04", bindings, 2, "diagnostic", "timed_io", 900, "Trigger low", "No accuracy claim without an external reference."); addPlan(plans, "hc-sr04.progression.v1", "ultrasonic_progression", "sensor_response", "Check progression", "Check declared distance progression.", "hc_sr04", bindings, 2, "diagnostic", "timed_io", 900, "Trigger low", "Geometry and alignment affect results."); }
-  if constexpr (ahea::profile::MPU6050_ENABLED) { const char* bindings[] = {"i2c_sda", "i2c_scl"}; addPlan(plans, "mpu6050.identity.v1", "i2c_identity", "sensor_identity", "Read identity", "Read registered identity.", "mpu6050", bindings, 2, "diagnostic", "read", 100, "I2C idle", "Identity does not prove axis accuracy."); addPlan(plans, "mpu6050.stationary.v1", "imu_stationary_baseline", "sensor_baseline", "Stationary baseline", "Capture bias, noise, and drift.", "mpu6050", bindings, 2, "diagnostic", "read", 1000, "I2C idle", "Baseline characterization only."); addPlan(plans, "mpu6050.motion-axis.v1", "imu_motion_response", "sensor_response", "Motion and axes", "Capture motion and axis consistency.", "mpu6050", bindings, 2, "diagnostic", "read", 1000, "I2C idle", "Motion applies at the sensor only."); }
-  if constexpr (ahea::profile::DHT11_ENABLED) { const char* bindings[] = {"dht_data_3v3"}; addPlan(plans, "dht11.response.v1", "dht_response_timing", "sensor_identity", "Check response", "Check response timing and checksum.", "dht11", bindings, 1, "diagnostic", "timed_io", 250, "Data pin released", "Checksum does not prove accuracy."); addPlan(plans, "dht11.environment.v1", "environment_reading", "sensor_baseline", "Characterize environment", "Read temperature and humidity.", "dht11", bindings, 1, "diagnostic", "timed_io", 250, "Data pin released", "Baseline characterization only."); addPlan(plans, "dht11.valid-rate.v1", "dht_consistency", "sensor_consistency", "Check valid and stale rates", "Measure valid and stale readings.", "dht11", bindings, 1, "diagnostic", "timed_io", 4500, "Data pin released", "DHT11 resolution and lag limit conclusions."); }
+  if constexpr (ahea::profile::HC_SR04_ENABLED && ahea::profile::HC_SR04_ECHO_DIVIDER_REVIEWED && ahea::profile::HC_SR04_ECHO_UPPER_OHMS == 8200 && ahea::profile::HC_SR04_ECHO_LOWER_OHMS == 10000) { const char* bindings[] = {"hc_trigger", "hc_echo_protected"}; addPlan(plans, "hc-sr04.echo-timing.v1", "ultrasonic_echo_timing", "sensor_baseline", "Measure echo timing", "Run bounded trigger and echo timing.", "hc_sr04", bindings, 2, "diagnostic", "timed_io", 500, "Trigger low", "Requires reviewed Echo level interface."); addPlan(plans, "hc-sr04.variance.v1", "ultrasonic_variance", "sensor_consistency", "Measure distance variance", "Measure repeated echo variance.", "hc_sr04", bindings, 2, "diagnostic", "timed_io", 900, "Trigger low", "No accuracy claim without an external reference."); addPlan(plans, "hc-sr04.progression.v1", "ultrasonic_progression", "sensor_response", "Check progression", "Check declared distance progression.", "hc_sr04", bindings, 2, "diagnostic", "timed_io", 900, "Trigger low", "Geometry and alignment affect results."); }
+  if constexpr (ahea::profile::MPU6050_ENABLED && ahea::profile::I2C_PULLUPS_AT_3V3_REVIEWED) { const char* bindings[] = {"i2c_sda", "i2c_scl"}; addPlan(plans, "mpu6050.identity.v1", "i2c_identity", "sensor_identity", "Read identity", "Read registered identity.", "mpu6050", bindings, 2, "diagnostic", "read", 100, "I2C idle", "Identity does not prove axis accuracy."); addPlan(plans, "mpu6050.stationary.v1", "imu_stationary_baseline", "sensor_baseline", "Stationary baseline", "Capture bias, noise, and drift.", "mpu6050", bindings, 2, "diagnostic", "read", 1000, "I2C idle", "Baseline characterization only."); addPlan(plans, "mpu6050.motion-axis.v1", "imu_motion_response", "sensor_response", "Motion and axes", "Capture motion and axis consistency.", "mpu6050", bindings, 2, "diagnostic", "read", 1000, "I2C idle", "Motion applies at the sensor only."); }
+  if constexpr (ahea::profile::DHT11_ENABLED && ahea::profile::DHT11_3V3_INTERFACE_REVIEWED) { const char* bindings[] = {"dht_data_3v3"}; addPlan(plans, "dht11.response.v1", "dht_response_timing", "sensor_identity", "Check response", "Check response timing and checksum.", "dht11", bindings, 1, "diagnostic", "timed_io", 250, "Data pin released", "Checksum does not prove accuracy."); addPlan(plans, "dht11.environment.v1", "environment_reading", "sensor_baseline", "Characterize environment", "Read temperature and humidity.", "dht11", bindings, 1, "diagnostic", "timed_io", 250, "Data pin released", "Baseline characterization only."); addPlan(plans, "dht11.valid-rate.v1", "dht_consistency", "sensor_consistency", "Check valid and stale rates", "Measure valid and stale readings.", "dht11", bindings, 1, "diagnostic", "timed_io", 4500, "Data pin released", "DHT11 resolution and lag limit conclusions."); }
+}
+
+String sha256Hex(const String& payload) {
+  unsigned char hash[32];
+  mbedtls_sha256_ret(reinterpret_cast<const unsigned char*>(payload.c_str()), payload.length(), hash, 0);
+  char encoded[65];
+  for (size_t index = 0; index < sizeof(hash); ++index) snprintf(encoded + index * 2, 3, "%02x", hash[index]);
+  encoded[64] = '\0';
+  return String(encoded);
+}
+
+String computeRegistryDigest() {
+  JsonDocument document;
+  JsonObject registry = document.to<JsonObject>();
+  populateRegistry(registry);
+  String payload;
+  serializeJson(registry, payload);
+  return sha256Hex(payload);
+}
+
+void addRegistry(JsonObject data) {
+  JsonObject registry = data["registry"].to<JsonObject>();
+  populateRegistry(registry);
+  registry["digest"] = registry_digest;
 }
 
 bool profileValid() {
-  return ahea::profile::PHYSICAL_ENABLED && (ahea::profile::LOOPBACK_FIXTURE_REVIEWED || (ahea::profile::HC_SR04_ENABLED && ahea::profile::HC_SR04_ECHO_DIVIDER_REVIEWED) || (ahea::profile::MPU6050_ENABLED && ahea::profile::I2C_PULLUPS_AT_3V3_REVIEWED) || (ahea::profile::DHT11_ENABLED && ahea::profile::DHT11_3V3_INTERFACE_REVIEWED));
+  const unsigned int reviewed_profiles =
+    (ahea::profile::LOOPBACK_FIXTURE_REVIEWED ? 1U : 0U) +
+    (ahea::profile::HC_SR04_ENABLED && ahea::profile::HC_SR04_ECHO_DIVIDER_REVIEWED && ahea::profile::HC_SR04_ECHO_UPPER_OHMS == 8200 && ahea::profile::HC_SR04_ECHO_LOWER_OHMS == 10000 ? 1U : 0U) +
+    (ahea::profile::MPU6050_ENABLED && ahea::profile::I2C_PULLUPS_AT_3V3_REVIEWED ? 1U : 0U) +
+    (ahea::profile::DHT11_ENABLED && ahea::profile::DHT11_3V3_INTERFACE_REVIEWED ? 1U : 0U);
+  return ahea::profile::PHYSICAL_ENABLED && reviewed_profiles == 1;
 }
 bool beginOperation(const String& id, ahea::OperationClass kind, bool enabled) { const auto result = safety.start(kind, millis(), enabled); if (result != ahea::StartResult::Accepted) { sendError(id, "SAFETY_REJECTED", "Firmware safety state rejected the registered plan."); return false; } return true; }
 
@@ -99,7 +154,7 @@ WaveformResult captureWaveform(uint32_t frequency_hz, uint32_t duration_ms, bool
   const uint32_t period_us = 1000000UL / frequency_hz; const uint32_t duration_us = duration_ms * 1000UL; const uint32_t started_us = micros();
   bool previous_source = false, previous_destination = false; uint32_t source_rises = 0, destination_rises = 0, source_high = 0, destination_high = 0, matches = 0, samples = 0; bool completed = true;
   while (static_cast<uint32_t>(micros() - started_us) < duration_us) {
-    if (!safety.tick(millis())) { completed = false; break; }
+    if (!continueOperation()) { completed = false; break; }
     const uint32_t elapsed = micros() - started_us; const bool output_high = (elapsed % period_us) < (period_us / 2); digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN, output_high ? HIGH : LOW);
     const bool source = capture_source ? digitalRead(ahea::profile::LOOPBACK_SOURCE_OBSERVER_PIN) == HIGH : false;
     const bool destination = capture_destination ? digitalRead(ahea::profile::LOOPBACK_DESTINATION_OBSERVER_PIN) == HIGH : false;
@@ -117,10 +172,10 @@ void executeLoopback(const String& id, const String& target_id, const String& pl
   if (!beginOperation(id, ahea::OperationClass::BoundedOutput, true)) return;
   const uint32_t started = millis(); digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN, LOW);
   if (plan_id == "loopback.inspect-stimulus.static.v1") {
-    digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN, LOW); delay(100); const bool source_low = digitalRead(ahea::profile::LOOPBACK_SOURCE_OBSERVER_PIN) == LOW; const bool destination_low = digitalRead(ahea::profile::LOOPBACK_DESTINATION_OBSERVER_PIN) == LOW;
-    digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN, HIGH); delay(100); const bool source_high = digitalRead(ahea::profile::LOOPBACK_SOURCE_OBSERVER_PIN) == HIGH; const bool destination_high = digitalRead(ahea::profile::LOOPBACK_DESTINATION_OBSERVER_PIN) == HIGH;
-    digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN, LOW); delay(100); const bool source_final = digitalRead(ahea::profile::LOOPBACK_SOURCE_OBSERVER_PIN) == LOW; const bool destination_final = digitalRead(ahea::profile::LOOPBACK_DESTINATION_OBSERVER_PIN) == LOW; safety.finish();
-    JsonDocument response = baseResponse(id, plan_id, started); JsonObject data = response["data"].as<JsonObject>(); const char* bindings[] = {"gpio4_stimulus", "gpio5_source_observer", "gpio6_destination_observer"}; addStringArray(data["bindingIds"].as<JsonArray>(), bindings, 3); addMeasurement(data["measurements"].as<JsonArray>(), "source_static_sequence_valid", source_low && source_high && source_final, "boolean", target_id); addMeasurement(data["measurements"].as<JsonArray>(), "destination_static_sequence_valid", destination_low && destination_high && destination_final, "boolean", target_id); addHealth(data["targetHealth"].as<JsonArray>(), target_id, true, 0); data["limitations"].as<JsonArray>().add("This registered plan checks digital levels only."); send(response); return;
+    digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN, LOW); const bool completed_low = waitSafely(100); const bool source_low = completed_low && digitalRead(ahea::profile::LOOPBACK_SOURCE_OBSERVER_PIN) == LOW; const bool destination_low = completed_low && digitalRead(ahea::profile::LOOPBACK_DESTINATION_OBSERVER_PIN) == LOW;
+    if (completed_low) digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN, HIGH); const bool completed_high = completed_low && waitSafely(100); const bool source_high = completed_high && digitalRead(ahea::profile::LOOPBACK_SOURCE_OBSERVER_PIN) == HIGH; const bool destination_high = completed_high && digitalRead(ahea::profile::LOOPBACK_DESTINATION_OBSERVER_PIN) == HIGH;
+    digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN, LOW); const bool completed_final = completed_high && waitSafely(100); const bool source_final = completed_final && digitalRead(ahea::profile::LOOPBACK_SOURCE_OBSERVER_PIN) == LOW; const bool destination_final = completed_final && digitalRead(ahea::profile::LOOPBACK_DESTINATION_OBSERVER_PIN) == LOW; safety.finish();
+    const bool completed = completed_low && completed_high && completed_final; JsonDocument response = baseResponse(id, plan_id, started); JsonObject data = response["data"].as<JsonObject>(); const char* bindings[] = {"gpio4_stimulus", "gpio5_source_observer", "gpio6_destination_observer"}; addStringArray(data["bindingIds"].as<JsonArray>(), bindings, 3); addMeasurement(data["measurements"].as<JsonArray>(), "source_static_sequence_valid", source_low && source_high && source_final, "boolean", target_id, completed); addMeasurement(data["measurements"].as<JsonArray>(), "destination_static_sequence_valid", destination_low && destination_high && destination_final, "boolean", target_id, completed); addHealth(data["targetHealth"].as<JsonArray>(), target_id, completed, completed ? 0 : 1); data["operation"]["accepted"] = completed; data["operation"]["cleanupSucceeded"] = digitalRead(ahea::profile::LOOPBACK_STIMULUS_PIN) == LOW; data["limitations"].as<JsonArray>().add("This registered plan checks digital levels only."); send(response); return;
   }
   const bool destination_only = plan_id == "loopback.observe-destination.1khz.v1"; const bool source_only = plan_id == "loopback.observe-source.1khz.v1"; const bool repeat = plan_id == "loopback.repeat-synchronized.500hz.v1";
   const bool known = destination_only || source_only || repeat || plan_id == "loopback.compare-endpoints.1khz.v1" || plan_id == "loopback.measure-timing.1khz.v1" || plan_id == "loopback.verify-path.1khz.v1";
@@ -137,33 +192,79 @@ bool readMpu(float& ax, float& ay, float& az, float& gx, float& gy, float& gz) {
 void executeMpu(const String& id, const String& target_id, const String& plan_id) {
   if (!ahea::profile::MPU6050_ENABLED || !ahea::profile::I2C_PULLUPS_AT_3V3_REVIEWED) return sendError(id, "PROFILE_DISABLED", "MPU6050 requires reviewed 3.3 V I2C pull-ups."); if (!beginOperation(id, ahea::OperationClass::Read, true)) return; const uint32_t started = millis(); JsonDocument response = baseResponse(id, plan_id, started); JsonObject data = response["data"].as<JsonObject>(); data["bindingIds"].as<JsonArray>().add("i2c_sda"); data["bindingIds"].as<JsonArray>().add("i2c_scl"); JsonArray values = data["measurements"].as<JsonArray>(); bool ok = true;
   if (plan_id == "mpu6050.identity.v1") { Wire.beginTransmission(ahea::profile::MPU6050_ADDRESS); Wire.write(0x75); ok = Wire.endTransmission(false) == 0 && Wire.requestFrom(ahea::profile::MPU6050_ADDRESS, static_cast<uint8_t>(1)) == 1; const int identity = ok ? Wire.read() : -1; addMeasurement(values, "identity_valid", identity == 0x68, "boolean", target_id, ok); }
-  else if (plan_id == "mpu6050.stationary.v1" || plan_id == "mpu6050.motion-axis.v1") { float magnitude_sum=0, magnitude_sq=0, gyro_sum=0, max_axis=0; int samples=0; for (int i=0;i<50;i++){ if(!safety.tick(millis())){ok=false;break;} float ax,ay,az,gx,gy,gz; if (!readMpu(ax,ay,az,gx,gy,gz)){ok=false;break;} const float magnitude=sqrtf(ax*ax+ay*ay+az*az); magnitude_sum+=magnitude; magnitude_sq+=magnitude*magnitude; gyro_sum+=sqrtf(gx*gx+gy*gy+gz*gz); max_axis=max(max_axis,max(abs(ax),max(abs(ay),abs(az)))); samples++; delay(20); } const float denominator=max(samples,1); const float average=magnitude_sum/denominator; if (plan_id == "mpu6050.stationary.v1") { addMeasurement(values,"stationary_noise_g",sqrtf(max(0.0F,magnitude_sq/denominator-average*average)),"g",target_id,ok); addMeasurement(values,"drift_dps",gyro_sum/denominator,"deg/s",target_id,ok); } else { addMeasurement(values,"motion_detected",max_axis>1.15F,"boolean",target_id,ok); addMeasurement(values,"axis_consistent",ok,"boolean",target_id,ok); } }
+  else if (plan_id == "mpu6050.stationary.v1" || plan_id == "mpu6050.motion-axis.v1") { float magnitude_sum=0, magnitude_sq=0, gyro_sum=0, max_axis=0; int samples=0; for (int i=0;i<50;i++){ if(!continueOperation()){ok=false;break;} float ax,ay,az,gx,gy,gz; if (!readMpu(ax,ay,az,gx,gy,gz)){ok=false;break;} const float magnitude=sqrtf(ax*ax+ay*ay+az*az); magnitude_sum+=magnitude; magnitude_sq+=magnitude*magnitude; gyro_sum+=sqrtf(gx*gx+gy*gy+gz*gz); max_axis=max(max_axis,max(abs(ax),max(abs(ay),abs(az)))); samples++; if(!waitSafely(20)){ok=false;break;} } const float denominator=max(samples,1); const float average=magnitude_sum/denominator; if (plan_id == "mpu6050.stationary.v1") { addMeasurement(values,"stationary_noise_g",sqrtf(max(0.0F,magnitude_sq/denominator-average*average)),"g",target_id,ok); addMeasurement(values,"drift_dps",gyro_sum/denominator,"deg/s",target_id,ok); } else { addMeasurement(values,"motion_detected",max_axis>1.15F,"boolean",target_id,ok); addMeasurement(values,"axis_consistent",ok,"boolean",target_id,ok); } }
   else { safety.finish(); return sendError(id,"UNKNOWN_PLAN","MPU6050 plan is not registered."); } safety.finish(); addHealth(data["targetHealth"].as<JsonArray>(),target_id,ok,ok?0:1); data["operation"]["accepted"]=ok; data["limitations"].as<JsonArray>().add("Results are baseline characterization without an independent orientation reference."); send(response);
 }
 
 void executeDht(const String& id, const String& target_id, const String& plan_id) {
-  if (!ahea::profile::DHT11_ENABLED || !ahea::profile::DHT11_3V3_INTERFACE_REVIEWED) return sendError(id,"PROFILE_DISABLED","DHT11 requires a reviewed 3.3 V-compatible data interface."); if (!beginOperation(id,ahea::OperationClass::TimedIo,true)) return; const uint32_t started=millis(); JsonDocument response=baseResponse(id,plan_id,started); JsonObject data=response["data"].as<JsonObject>(); data["bindingIds"].as<JsonArray>().add("dht_data_3v3"); JsonArray values=data["measurements"].as<JsonArray>(); const uint32_t call_started=micros(); const float humidity=dht.readHumidity(); const float temperature=dht.readTemperature(); const uint32_t response_us=micros()-call_started; bool ok=isfinite(humidity)&&isfinite(temperature)&&safety.tick(millis());
+  if (!ahea::profile::DHT11_ENABLED || !ahea::profile::DHT11_3V3_INTERFACE_REVIEWED) return sendError(id,"PROFILE_DISABLED","DHT11 requires a reviewed 3.3 V-compatible data interface."); if (!beginOperation(id,ahea::OperationClass::TimedIo,true)) return; const uint32_t started=millis(); JsonDocument response=baseResponse(id,plan_id,started); JsonObject data=response["data"].as<JsonObject>(); data["bindingIds"].as<JsonArray>().add("dht_data_3v3"); JsonArray values=data["measurements"].as<JsonArray>(); const uint32_t call_started=micros(); const float humidity=dht.readHumidity(); const float temperature=dht.readTemperature(); const uint32_t response_us=micros()-call_started; bool ok=isfinite(humidity)&&isfinite(temperature)&&continueOperation();
   if (plan_id == "dht11.response.v1") { addMeasurement(values,"checksum_valid",ok,"boolean",target_id,ok); addMeasurement(values,"response_time_us",response_us,"us",target_id,ok); }
   else if (plan_id == "dht11.environment.v1") { addMeasurement(values,"temperature_c",temperature,"C",target_id,ok); addMeasurement(values,"humidity_percent",humidity,"%",target_id,ok); }
-  else if (plan_id == "dht11.valid-rate.v1") { int valid=ok?1:0; float previous_t=temperature,previous_h=humidity; int stale=0; for(int i=1;i<3;i++){delay(2000);if(!safety.tick(millis())){ok=false;break;} const float h=dht.readHumidity(),t=dht.readTemperature(); if(isfinite(h)&&isfinite(t)){valid++;if(t==previous_t&&h==previous_h)stale++;previous_t=t;previous_h=h;}} addMeasurement(values,"valid_rate",valid/3.0F,"ratio",target_id); addMeasurement(values,"stale_rate",stale/2.0F,"ratio",target_id); }
+  else if (plan_id == "dht11.valid-rate.v1") { int valid=ok?1:0; float previous_t=temperature,previous_h=humidity; int stale=0; for(int i=1;i<3;i++){if(!waitSafely(2000)){ok=false;break;} const float h=dht.readHumidity(),t=dht.readTemperature(); if(isfinite(h)&&isfinite(t)){valid++;if(t==previous_t&&h==previous_h)stale++;previous_t=t;previous_h=h;}} addMeasurement(values,"valid_rate",valid/3.0F,"ratio",target_id); addMeasurement(values,"stale_rate",stale/2.0F,"ratio",target_id); }
   else { safety.finish(); return sendError(id,"UNKNOWN_PLAN","DHT11 plan is not registered."); } safety.finish(); addHealth(data["targetHealth"].as<JsonArray>(),target_id,ok,ok?0:1); data["operation"]["accepted"]=ok; data["limitations"].as<JsonArray>().add("Valid protocol frames do not establish environmental accuracy."); send(response);
 }
 
 void executeHc(const String& id, const String& target_id, const String& plan_id) {
-  if (!ahea::profile::HC_SR04_ENABLED || !ahea::profile::HC_SR04_ECHO_DIVIDER_REVIEWED || ahea::profile::HC_SR04_ECHO_UPPER_OHMS != 8200 || ahea::profile::HC_SR04_ECHO_LOWER_OHMS != 10000) return sendError(id,"ECHO_PROTECTION_REQUIRED","HC-SR04 requires the reviewed 8.2 kOhm/10 kOhm Echo divider."); if (!beginOperation(id,ahea::OperationClass::TimedIo,true)) return; const uint32_t started=millis(); const int sample_count=plan_id=="hc-sr04.echo-timing.v1"?8:12; float sum=0,square_sum=0,first=0,last=0; int valid=0; for(int i=0;i<sample_count;i++){if(!safety.tick(millis()))break;digitalWrite(ahea::profile::HC_SR04_TRIGGER_PIN,LOW);delayMicroseconds(2);digitalWrite(ahea::profile::HC_SR04_TRIGGER_PIN,HIGH);delayMicroseconds(10);digitalWrite(ahea::profile::HC_SR04_TRIGGER_PIN,LOW);const unsigned long duration=pulseIn(ahea::profile::HC_SR04_ECHO_PIN,HIGH,30000);if(duration){const float distance=duration*.0343F/2.0F;if(valid==0)first=distance;last=distance;sum+=distance;square_sum+=distance*distance;valid++;}delay(60);} safety.finish(); const bool ok=valid>0&&!safety.timedOut(); const float average=ok?sum/valid:0; JsonDocument response=baseResponse(id,plan_id,started); JsonObject data=response["data"].as<JsonObject>(); data["bindingIds"].as<JsonArray>().add("hc_trigger");data["bindingIds"].as<JsonArray>().add("hc_echo_protected");JsonArray values=data["measurements"].as<JsonArray>(); if(plan_id=="hc-sr04.echo-timing.v1"){addMeasurement(values,"distance_cm",average,"cm",target_id,ok);addMeasurement(values,"timeout_rate",1.0F-valid/static_cast<float>(sample_count),"ratio",target_id);} else if(plan_id=="hc-sr04.variance.v1") addMeasurement(values,"distance_stddev_cm",ok?sqrtf(max(0.0F,square_sum/valid-average*average)):0,"cm",target_id,ok); else if(plan_id=="hc-sr04.progression.v1") addMeasurement(values,"progression_consistent",ok&&abs(last-first)>2,"boolean",target_id,ok); else {return sendError(id,"UNKNOWN_PLAN","HC-SR04 plan is not registered.");} addHealth(data["targetHealth"].as<JsonArray>(),target_id,ok,ok?0:1);data["operation"]["accepted"]=ok;data["operation"]["timedOut"]=!ok;data["limitations"].as<JsonArray>().add("Beam geometry, alignment, and speed of sound affect distance estimates.");send(response);
+  if (!ahea::profile::HC_SR04_ENABLED || !ahea::profile::HC_SR04_ECHO_DIVIDER_REVIEWED || ahea::profile::HC_SR04_ECHO_UPPER_OHMS != 8200 || ahea::profile::HC_SR04_ECHO_LOWER_OHMS != 10000) return sendError(id,"ECHO_PROTECTION_REQUIRED","HC-SR04 requires the reviewed 8.2 kOhm/10 kOhm Echo divider."); if (!beginOperation(id,ahea::OperationClass::TimedIo,true)) return; const uint32_t started=millis(); const int sample_count=plan_id=="hc-sr04.echo-timing.v1"?8:12; float sum=0,square_sum=0,first=0,last=0; int valid=0; bool completed=true; for(int i=0;i<sample_count;i++){if(!continueOperation()){completed=false;break;}digitalWrite(ahea::profile::HC_SR04_TRIGGER_PIN,LOW);delayMicroseconds(2);digitalWrite(ahea::profile::HC_SR04_TRIGGER_PIN,HIGH);delayMicroseconds(10);digitalWrite(ahea::profile::HC_SR04_TRIGGER_PIN,LOW);const unsigned long duration=pulseIn(ahea::profile::HC_SR04_ECHO_PIN,HIGH,30000);if(duration){const float distance=duration*.0343F/2.0F;if(valid==0)first=distance;last=distance;sum+=distance;square_sum+=distance*distance;valid++;}if(!waitSafely(60)){completed=false;break;}} safety.finish(); const bool ok=completed&&valid>0&&!safety.timedOut(); const float average=ok?sum/valid:0; JsonDocument response=baseResponse(id,plan_id,started); JsonObject data=response["data"].as<JsonObject>(); data["bindingIds"].as<JsonArray>().add("hc_trigger");data["bindingIds"].as<JsonArray>().add("hc_echo_protected");JsonArray values=data["measurements"].as<JsonArray>(); if(plan_id=="hc-sr04.echo-timing.v1"){addMeasurement(values,"distance_cm",average,"cm",target_id,ok);addMeasurement(values,"timeout_rate",1.0F-valid/static_cast<float>(sample_count),"ratio",target_id);} else if(plan_id=="hc-sr04.variance.v1") addMeasurement(values,"distance_stddev_cm",ok?sqrtf(max(0.0F,square_sum/valid-average*average)):0,"cm",target_id,ok); else if(plan_id=="hc-sr04.progression.v1") addMeasurement(values,"progression_consistent",ok&&abs(last-first)>2,"boolean",target_id,ok); else {return sendError(id,"UNKNOWN_PLAN","HC-SR04 plan is not registered.");} addHealth(data["targetHealth"].as<JsonArray>(),target_id,ok,ok?0:1);data["operation"]["accepted"]=ok;data["operation"]["timedOut"]=safety.timedOut();data["operation"]["cleanupSucceeded"]=digitalRead(ahea::profile::HC_SR04_TRIGGER_PIN)==LOW;data["limitations"].as<JsonArray>().add("Beam geometry, alignment, and speed of sound affect distance estimates.");send(response);
+}
+
+bool loopbackPlan(const String& plan_id) {
+  return plan_id == "loopback.observe-destination.1khz.v1" || plan_id == "loopback.observe-source.1khz.v1" ||
+    plan_id == "loopback.compare-endpoints.1khz.v1" || plan_id == "loopback.measure-timing.1khz.v1" ||
+    plan_id == "loopback.inspect-stimulus.static.v1" || plan_id == "loopback.repeat-synchronized.500hz.v1" ||
+    plan_id == "loopback.verify-path.1khz.v1";
+}
+bool mpuPlan(const String& plan_id) { return plan_id == "mpu6050.identity.v1" || plan_id == "mpu6050.stationary.v1" || plan_id == "mpu6050.motion-axis.v1"; }
+bool dhtPlan(const String& plan_id) { return plan_id == "dht11.response.v1" || plan_id == "dht11.environment.v1" || plan_id == "dht11.valid-rate.v1"; }
+bool hcPlan(const String& plan_id) { return plan_id == "hc-sr04.echo-timing.v1" || plan_id == "hc-sr04.variance.v1" || plan_id == "hc-sr04.progression.v1"; }
+bool planAvailable(const String& plan_id) {
+  if (loopbackPlan(plan_id)) return ahea::profile::LOOPBACK_FIXTURE_REVIEWED;
+  if (mpuPlan(plan_id)) return ahea::profile::MPU6050_ENABLED && ahea::profile::I2C_PULLUPS_AT_3V3_REVIEWED;
+  if (dhtPlan(plan_id)) return ahea::profile::DHT11_ENABLED && ahea::profile::DHT11_3V3_INTERFACE_REVIEWED;
+  if (hcPlan(plan_id)) return ahea::profile::HC_SR04_ENABLED && ahea::profile::HC_SR04_ECHO_DIVIDER_REVIEWED && ahea::profile::HC_SR04_ECHO_UPPER_OHMS == 8200 && ahea::profile::HC_SR04_ECHO_LOWER_OHMS == 10000;
+  return false;
+}
+bool targetMatchesPlan(const String& target_id, const String& plan_id) {
+  if (loopbackPlan(plan_id)) return target_id == "loopback-path";
+  if (mpuPlan(plan_id)) return target_id == "imu";
+  if (dhtPlan(plan_id)) return target_id == "climate-sensor";
+  if (hcPlan(plan_id)) return target_id == "distance-sensor";
+  return false;
 }
 
 void processCommand(const String& line) {
-  JsonDocument request; if (deserializeJson(request,line)!=DeserializationError::Ok||!request["id"].is<const char*>()||!request["cmd"].is<const char*>()||!request["args"].is<JsonObject>()) return sendError("unknown","MALFORMED_REQUEST","Expected id, cmd, and args object."); const String id=request["id"].as<String>(); if(requestSeen(id))return sendError(id,"DUPLICATE_REQUEST","Duplicate or replayed request IDs are rejected."); const String command=request["cmd"].as<String>();JsonObject args=request["args"].as<JsonObject>();for(JsonPair pair:args)if(String(pair.key().c_str())!="targetId"&&String(pair.key().c_str())!="planId")return sendError(id,"UNSAFE_ARGUMENT","Only targetId and registered planId are accepted."); const String target_id=args["targetId"]|"";const String plan_id=args["planId"]|"";
-  if(command=="hello")return sendHello(id); if(command=="abort"){safeOutputs();safety.emergencyStop();JsonDocument response=baseResponse(id,"abort.v1",millis());response["data"]["operation"]["aborted"]=true;send(response);return;} if(command=="arm_session"){safeOutputs();if(!safety.arm(profileValid()))return sendError(id,"ARM_REJECTED","Physical profile is disabled or its electrical review is incomplete.");JsonDocument response=baseResponse(id,"arm_session",millis());send(response);return;} if(command!="execute_plan")return sendError(id,"UNKNOWN_COMMAND","Only registered plan execution is supported."); if(!ahea::profile::PHYSICAL_ENABLED)return sendError(id,"PROFILE_DISABLED","Physical operations are disabled.");
-  if(plan_id.startsWith("loopback."))return executeLoopback(id,target_id,plan_id); if(plan_id.startsWith("mpu6050."))return executeMpu(id,target_id,plan_id); if(plan_id.startsWith("dht11."))return executeDht(id,target_id,plan_id); if(plan_id.startsWith("hc-sr04."))return executeHc(id,target_id,plan_id); sendError(id,"UNKNOWN_PLAN","Plan is not registered.");
+  JsonDocument request;
+  if (deserializeJson(request, line) != DeserializationError::Ok || !request.is<JsonObject>() || request.as<JsonObject>().size() != 3 || !request["id"].is<const char*>() || !request["cmd"].is<const char*>() || !request["args"].is<JsonObject>()) return sendError("unknown", "MALFORMED_REQUEST", "Expected only id, cmd, and args object.");
+  const String id = request["id"].as<String>();
+  if (id.isEmpty() || id.length() > 120) return sendError("unknown", "MALFORMED_REQUEST", "Request id must contain 1 to 120 characters.");
+  if (requestSeen(id)) return sendError(id, "DUPLICATE_REQUEST", "Duplicate or replayed request IDs are rejected.");
+  const String command = request["cmd"].as<String>();
+  JsonObject args = request["args"].as<JsonObject>();
+  for (JsonPair pair : args) if (String(pair.key().c_str()) != "targetId" && String(pair.key().c_str()) != "planId") return sendError(id, "UNSAFE_ARGUMENT", "Only targetId and registered planId are accepted.");
+  if (command == "hello") { if (args.size() != 0) return sendError(id, "UNSAFE_ARGUMENT", "hello accepts no arguments."); return sendHello(id); }
+  if (command == "abort") { if (args.size() != 0) return sendError(id, "UNSAFE_ARGUMENT", "abort accepts no arguments."); safeOutputs(); safety.emergencyStop(); JsonDocument response = baseResponse(id, "abort.v1", millis()); response["data"]["operation"]["aborted"] = true; send(response); return; }
+  if (command == "arm_session") { if (args.size() != 0) return sendError(id, "UNSAFE_ARGUMENT", "arm_session accepts no arguments."); safeOutputs(); if (!safety.arm(profileValid())) return sendError(id, "ARM_REJECTED", "Physical profile is disabled, ambiguous, or its electrical review is incomplete."); JsonDocument response = baseResponse(id, "arm_session", millis()); send(response); return; }
+  if (command != "execute_plan") return sendError(id, "UNKNOWN_COMMAND", "Only registered plan execution is supported.");
+  if (args.size() != 2 || !args["targetId"].is<const char*>() || !args["planId"].is<const char*>()) return sendError(id, "MALFORMED_REQUEST", "execute_plan requires targetId and planId only.");
+  const String target_id = args["targetId"].as<String>(); const String plan_id = args["planId"].as<String>();
+  if (target_id.isEmpty() || target_id.length() > 120 || plan_id.isEmpty() || plan_id.length() > 120) return sendError(id, "MALFORMED_REQUEST", "Target and plan identities must contain 1 to 120 characters.");
+  if (!ahea::profile::PHYSICAL_ENABLED) return sendError(id, "PROFILE_DISABLED", "Physical operations are disabled.");
+  if (!planAvailable(plan_id)) return sendError(id, "UNKNOWN_PLAN", "Plan is not registered by the reviewed profile.");
+  if (!targetMatchesPlan(target_id, plan_id)) return sendError(id, "TARGET_MISMATCH", "Target does not match the registered plan.");
+  if (loopbackPlan(plan_id)) return executeLoopback(id, target_id, plan_id);
+  if (mpuPlan(plan_id)) return executeMpu(id, target_id, plan_id);
+  if (dhtPlan(plan_id)) return executeDht(id, target_id, plan_id);
+  if (hcPlan(plan_id)) return executeHc(id, target_id, plan_id);
+  sendError(id, "UNKNOWN_PLAN", "Plan is not registered.");
 }
 }  // namespace
 
 void setup() {
-  Serial.begin(115200); Wire.begin(); if constexpr (ahea::profile::LOOPBACK_FIXTURE_REVIEWED) { pinMode(ahea::profile::LOOPBACK_STIMULUS_PIN,OUTPUT); digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN,LOW); pinMode(ahea::profile::LOOPBACK_SOURCE_OBSERVER_PIN,INPUT); pinMode(ahea::profile::LOOPBACK_DESTINATION_OBSERVER_PIN,INPUT); }
+  if constexpr (ahea::profile::LOOPBACK_FIXTURE_REVIEWED) { pinMode(ahea::profile::LOOPBACK_STIMULUS_PIN,OUTPUT); digitalWrite(ahea::profile::LOOPBACK_STIMULUS_PIN,LOW); }
+  esp_task_wdt_init(ahea::profile::WATCHDOG_TIMEOUT_SECONDS, true); esp_task_wdt_add(nullptr);
+  registry_digest = computeRegistryDigest(); Serial.begin(115200); if constexpr (ahea::profile::LOOPBACK_FIXTURE_REVIEWED) { pinMode(ahea::profile::LOOPBACK_SOURCE_OBSERVER_PIN,INPUT); pinMode(ahea::profile::LOOPBACK_DESTINATION_OBSERVER_PIN,INPUT); }
   if constexpr (ahea::profile::DHT11_ENABLED) dht.begin();
   if constexpr (ahea::profile::HC_SR04_ENABLED) { pinMode(ahea::profile::HC_SR04_TRIGGER_PIN,OUTPUT); digitalWrite(ahea::profile::HC_SR04_TRIGGER_PIN,LOW); pinMode(ahea::profile::HC_SR04_ECHO_PIN,INPUT); }
-  if constexpr (ahea::profile::MPU6050_ENABLED) { Wire.beginTransmission(ahea::profile::MPU6050_ADDRESS); Wire.write(0x6B); Wire.write(0); Wire.endTransmission(); }
+  if constexpr (ahea::profile::MPU6050_ENABLED) { Wire.begin(ahea::profile::MPU6050_SDA_PIN, ahea::profile::MPU6050_SCL_PIN, ahea::profile::MPU6050_I2C_FREQUENCY_HZ); Wire.beginTransmission(ahea::profile::MPU6050_ADDRESS); Wire.write(0x6B); Wire.write(0); Wire.endTransmission(); }
 }
-void loop() { while(Serial.available()){const char character=static_cast<char>(Serial.read());if(character=='\n'){if(!line_buffer.isEmpty())processCommand(line_buffer);line_buffer="";}else if(line_buffer.length()<2048)line_buffer+=character;else{line_buffer="";safeOutputs();safety.fault();}} }
+void loop() { esp_task_wdt_reset(); while(Serial.available()){const char character=static_cast<char>(Serial.read());if(character=='\n'){if(!line_buffer.isEmpty())processCommand(line_buffer);line_buffer="";}else if(line_buffer.length()<2048)line_buffer+=character;else{line_buffer="";safeOutputs();safety.fault();}} }

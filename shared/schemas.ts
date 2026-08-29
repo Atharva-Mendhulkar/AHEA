@@ -79,16 +79,23 @@ export const capabilityRegistrySchema = z.object({ schemaVersion: z.literal(1), 
   });
 });
 
-export const protocolRequestSchema = z.object({ id, cmd: z.enum([...hardwareCommands, "hello", "arm_session"] as const), args: z.object({ targetId: id.optional(), planId: id.optional() }).strict() }).strict();
-export const protocolResponseSchema = z.object({
-  id, ok: z.boolean(),
-  data: z.object({
+const noProtocolArgs = z.object({}).strict();
+export const protocolRequestSchema = z.discriminatedUnion("cmd", [
+  z.object({ id, cmd: z.literal("hello"), args: noProtocolArgs }).strict(),
+  z.object({ id, cmd: z.literal("arm_session"), args: noProtocolArgs }).strict(),
+  z.object({ id, cmd: z.literal("abort"), args: noProtocolArgs }).strict(),
+  z.object({ id, cmd: z.literal("execute_plan"), args: z.object({ targetId: id, planId: id }).strict() }).strict(),
+]);
+const protocolDataSchema = z.object({
     firmwareVersion: z.string(), boardIdentity: z.string(), protocolVersion: z.string(), hardwareProfileId: z.string(), registryDigest: z.string(), physicalEnabled: z.boolean(),
     monotonicStartedMs: z.number().nonnegative(), monotonicEndedMs: z.number().nonnegative(), sequenceNumber: z.number().int().nonnegative(), planId: z.string(), bindingIds: z.array(id),
     measurements: z.array(measurementSchema), series: z.array(seriesSchema), targetHealth: z.array(healthSchema), operation: operationSchema, registry: capabilityRegistrySchema.optional(), limitations: z.array(z.string()),
-  }).strict().optional().nullable(),
-  error: z.object({ code: z.string(), message: z.string() }).strict().nullable(),
-}).strict();
+  }).strict();
+const protocolErrorSchema = z.object({ code: z.string(), message: z.string() }).strict();
+export const protocolResponseSchema = z.discriminatedUnion("ok", [
+  z.object({ id, ok: z.literal(true), data: protocolDataSchema, error: z.null() }).strict(),
+  z.object({ id, ok: z.literal(false), data: z.null(), error: protocolErrorSchema }).strict(),
+]);
 
 export const storedSessionHeaderSchema = z.object({ schemaVersion: z.literal(3), lifecycle: z.enum(lifecycleStates) }).passthrough();
 export const evidenceStateSchema = z.enum(evidenceStates);

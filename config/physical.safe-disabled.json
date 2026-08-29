@@ -1,7 +1,13 @@
 {
   "enabled": false,
   "profileId": "esp32s3-loopback-safe-disabled-v1",
-  "boardIdentity": "ESP32-S3-DEVKITC-1-UNREVIEWED",
+  "boardIdentity": "ESP32-S3-N16R8-CP2102-UNREVIEWED",
+  "detectedMemory": {
+    "flashMB": 16,
+    "psramMB": 8,
+    "flashMode": "qio",
+    "psramMode": "opi"
+  },
   "serialPath": null,
   "requirements": [
     "Confirm the exact ESP32-S3 board and 3.3 V GPIO limits",
