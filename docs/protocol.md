@@ -1,23 +1,29 @@
 # USB serial protocol
 
-Transport is newline-delimited JSON at 115200 baud. Runtime requests contain an opaque request ID and a registered plan identity only:
+Transport is newline-delimited JSON at 115200 baud. Requests contain an opaque ID, a semantic command, and only a registered device/plan identity:
 
 ```json
-{"id":"exp-3","cmd":"execute_plan","args":{"targetId":"loopback-path","planId":"loopback.compare-endpoints.1khz.v1"}}
+{"id":"exp-3","cmd":"sample_fsr","args":{"deviceId":"fsr5","planId":"fsr-standard-v1"}}
 ```
 
-The only commands are `hello`, `arm_session`, `execute_plan`, and `abort`. Unknown arguments are rejected. Callers cannot provide pins, waveform values, timing, ADC settings, I²C addresses/registers/bytes, or arbitrary bus operations.
+Responses contain bounded measurements, health, and operation state:
 
-`hello` returns board, firmware, protocol, and hardware-profile identities plus the versioned capability registry and digest. Before arming, the backend compares every required plan's type, bindings, phases, budget class, duration, fixed parameters, measurement channels/units, and cleanup behavior with its reviewed definition. A missing or altered field fails closed.
+```json
+{
+  "id":"exp-3",
+  "ok":true,
+  "data":{
+    "elapsedMs":640,
+    "measurements":[
+      {"channel":"adc_mean","value":1432,"unit":"adc_raw","deviceId":"fsr5","quality":"valid"}
+    ],
+    "sensorHealth":[{"deviceId":"fsr5","healthy":true,"errorRate":0}],
+    "operation":{"accepted":true,"aborted":false,"timedOut":false,"estopLatched":false,"reasons":[]}
+  },
+  "error":null
+}
+```
 
-A successful plan response includes:
+The five-DUT demo supports `scan_i2c`, `sample_mpu6050`, `sample_dht11`, `sample_voltage`, `sample_ina219`, `exercise_servo`, and `abort`. `hello` and `arm_session` are coordinator operations. `exercise_servo` is rejected unless the reviewed profile explicitly enables it.
 
-- plan and binding identities;
-- firmware, board, profile, and registry identities;
-- monotonic start/end time and sequence number;
-- typed measurements and bounded series;
-- target health and operation status;
-- explicit cleanup success; and
-- measurement and claim limitations.
-
-Firmware rejects malformed input, unknown plans or bindings, duplicates, overlapping operations, disabled profiles, timeouts, exhausted budgets, and latched emergency stops. The loopback stimulus is driven low on success, error, timeout, abort, disconnect handling, and restart.
+Raw pins, PWM, ADC configuration, arbitrary timing, resistor values, and I²C bytes are not accepted. Firmware rejects unknown commands, bindings, plans, arguments, duplicates, overlap, timeout, disabled profiles, and exhausted budgets.
