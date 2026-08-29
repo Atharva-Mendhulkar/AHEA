@@ -14,7 +14,7 @@ The repository is simulation-ready. Physical mode intentionally ships **disabled
 - Two consecutive post-repair verification passes before `CONFIRMED`
 - Firmware-local timeout, cooldown, budgets, current trip, deduplication, and latched e-stop
 - Visible deterministic fallback when the OpenAI API is unavailable
-- Responsive wireframe dashboard with shadcn-inspired controls, persistent light/dark themes, separate workspace views, and animated observation plotters
+- Responsive dotted-wireframe dashboard with liquid-glass surfaces, persistent light/dark themes, separate workspace views, and animated observation plotters
 
 ## Architecture
 

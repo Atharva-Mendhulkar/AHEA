@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#131315"/>
+  <!-- AHEA technical A mark -->
+  <path d="M118 390L225 132C232 115 249 104 267 104H296L188 390H118Z" fill="white"/>
+  <path d="M296 104H325C343 104 360 115 367 132L420 390H350L296 104Z" fill="#E7E7E7"/>
+  <!-- diagnostic / circuit stroke -->
+  <path d="M206 390L286 270" stroke="white" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="294" cy="258" r="28" fill="#131315" stroke="white" stroke-width="12"/>
+  <circle cx="294" cy="258" r="7" fill="white"/>
+</svg>

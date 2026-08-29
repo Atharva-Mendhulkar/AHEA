@@ -6,6 +6,7 @@ const state = {
   viewAnimation: null,
   plotFrames: new Map(),
   plotKeys: new Map(),
+  plotResizeFrame: null,
 };
 const $ = (selector) => document.querySelector(selector);
 const labels = {
@@ -103,6 +104,11 @@ function drawPlot(kind, series) {
   const duration = $(`#${kind}-duration`);
   const previousFrame = state.plotFrames.get(kind);
   if (previousFrame) cancelAnimationFrame(previousFrame);
+  const bounds = canvas.getBoundingClientRect();
+  if (bounds.width < 2 || bounds.height < 2) {
+    state.plotKeys.delete(kind);
+    return;
+  }
   if (!series?.values?.length) {
     empty.hidden = false;
     reading.textContent = `— ${kind === "motion" ? "g" : "mA"}`;
@@ -123,7 +129,7 @@ function drawPlot(kind, series) {
   const frame = (now) => {
     const progress = animate ? Math.min(1, (now - started) / totalDuration) : 1;
     const visibleCount = Math.max(1, Math.ceil(series.values.length * progress));
-    paintPlot(canvas, series.values.slice(0, visibleCount), kind);
+    paintPlot(canvas, series.values.slice(0, visibleCount), kind, series.values);
     const current = series.values[visibleCount - 1];
     reading.textContent = `${formatReading(current, series.unit)} ${series.unit}`;
     if (progress < 1) state.plotFrames.set(kind, requestAnimationFrame(frame));
@@ -132,7 +138,7 @@ function drawPlot(kind, series) {
   state.plotFrames.set(kind, requestAnimationFrame(frame));
 }
 
-function paintPlot(canvas, values, kind) {
+function paintPlot(canvas, values, kind, fullSeries = values) {
   const bounds = canvas.getBoundingClientRect();
   const ratio = Math.min(devicePixelRatio || 1, 2);
   const width = Math.max(1, Math.round(bounds.width * ratio));
@@ -146,26 +152,38 @@ function paintPlot(canvas, values, kind) {
   if (!values.length) return;
   const styles = getComputedStyle(document.documentElement);
   const color = kind === "motion" ? styles.getPropertyValue("--accent").trim() : styles.getPropertyValue("--success").trim();
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
+  const minimum = Math.min(...fullSeries);
+  const maximum = Math.max(...fullSeries);
   const padding = Math.max((maximum - minimum) * .18, kind === "motion" ? .005 : 2);
   const low = minimum - padding;
   const high = maximum + padding;
-  const xStep = width / Math.max(1, values.length - 1);
+  const inset = 10 * ratio;
+  const plotWidth = Math.max(1, width - inset * 2);
+  const plotHeight = Math.max(1, height - inset * 2);
+  const xStep = plotWidth / Math.max(1, fullSeries.length - 1);
   context.beginPath();
   context.lineWidth = 1.6 * ratio;
   context.lineJoin = "round";
   context.lineCap = "round";
   context.strokeStyle = color;
   values.forEach((value, index) => {
-    const x = index * xStep;
-    const y = height - ((value - low) / Math.max(.0001, high - low)) * height;
+    const x = inset + index * xStep;
+    const y = inset + (1 - ((value - low) / Math.max(.0001, high - low))) * plotHeight;
     if (index === 0) context.moveTo(x, y);
     else context.lineTo(x, y);
   });
   context.stroke();
-  const x = (values.length - 1) * xStep;
-  const y = height - ((values.at(-1) - low) / Math.max(.0001, high - low)) * height;
+  const x = inset + (values.length - 1) * xStep;
+  const y = inset + (1 - ((values.at(-1) - low) / Math.max(.0001, high - low))) * plotHeight;
+  context.save();
+  context.globalAlpha = .2;
+  context.strokeStyle = color;
+  context.setLineDash([2 * ratio, 4 * ratio]);
+  context.beginPath();
+  context.moveTo(x, inset);
+  context.lineTo(x, height - inset);
+  context.stroke();
+  context.restore();
   context.fillStyle = color;
   context.beginPath();
   context.arc(x, y, 2.8 * ratio, 0, Math.PI * 2);
@@ -299,8 +317,11 @@ document.querySelectorAll(".section-tab").forEach((tab) => {
 });
 window.addEventListener("popstate", () => switchView(location.hash.slice(1) || "evidence", false));
 window.addEventListener("resize", () => {
-  state.plotKeys.clear();
-  if (state.session && state.activeView === "evidence") renderPlots(state.session);
+  cancelAnimationFrame(state.plotResizeFrame);
+  state.plotResizeFrame = requestAnimationFrame(() => {
+    state.plotKeys.clear();
+    if (state.session && state.activeView === "evidence") renderPlots(state.session);
+  });
 });
 
 $("#theme-toggle").addEventListener("click", () => {

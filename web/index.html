@@ -77,6 +77,11 @@
         <div class="page-stage">
           <section id="view-evidence" class="workspace-page active" role="tabpanel" data-page="evidence">
             <div class="dashboard-grid">
+              <section class="card card-span-12 intervention-card">
+                <div><p class="eyebrow">Human checkpoint</p><h2>Declare the repair</h2><p class="muted">Verification remains locked until you record the physical intervention.</p></div>
+                <label class="field">What changed?<input id="intervention" value="Reconnected the motor lead"></label>
+                <button id="declare" class="button button-secondary" type="button" disabled>Declare repair</button>
+              </section>
               <section class="card card-span-7">
                 <div class="card-header"><div><p class="eyebrow">Current observation</p><h2 id="observation-title">Awaiting evidence</h2></div><span id="observation-source" class="badge" data-tone="neutral">No source</span></div>
                 <div id="measurements" class="measurement-grid"></div>
@@ -96,11 +101,6 @@
                 <div class="card-header"><div><p class="eyebrow">INA219 stream</p><h2>Motor current</h2></div><span id="current-reading" class="live-reading">— mA</span></div>
                 <div class="plot-wrap"><canvas id="current-plot" aria-label="Current sensor serial plot"></canvas><span class="plot-empty" id="current-empty">Waiting for current samples</span></div>
                 <div class="plot-axis"><span>0 ms</span><span id="current-duration">—</span></div>
-              </section>
-              <section class="card card-span-12 intervention-card">
-                <div><p class="eyebrow">Human checkpoint</p><h2>Declare the repair</h2><p class="muted">Verification remains locked until you record the physical intervention.</p></div>
-                <label class="field">What changed?<input id="intervention" value="Reconnected the motor lead"></label>
-                <button id="declare" class="button button-secondary" type="button" disabled>Declare repair</button>
               </section>
             </div>
           </section>
