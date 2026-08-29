@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="AHEA bounded hardware diagnostic agent">
+    <title>AHEA Hardware Agent</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Adaptive Hardware Evidence Agent</p>
+        <h1>Motor path investigator</h1>
+      </div>
+      <div class="status-row">
+        <span id="mode-badge" class="badge simulation">SIMULATION</span>
+        <span id="connection-badge" class="badge neutral">NOT CONNECTED</span>
+        <button id="estop" class="danger" disabled>Emergency stop</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="setup" class="panel hero">
+        <div>
+          <p class="kicker">Safe by construction</p>
+          <h2>Diagnose with evidence, not guesses.</h2>
+          <p>Every motor pulse is fixed by firmware, requires approval, and becomes a provenance-stamped observation.</p>
+        </div>
+        <form id="start-form">
+          <label>Evidence source
+            <select id="mode">
+              <option value="simulation">Simulation</option>
+              <option value="physical">Physical (safe-locked)</option>
+            </select>
+          </label>
+          <label>Simulation fixture
+            <select id="fixture">
+              <option value="disconnected">Disconnected motor lead</option>
+              <option value="healthy">Healthy motor</option>
+              <option value="stalled">Mechanical stall</option>
+              <option value="sensor_failure">Sensor failure</option>
+            </select>
+          </label>
+          <label>Reported problem
+            <textarea id="problem" rows="3">The motor is supposed to run, but nothing is moving. Diagnose it.</textarea>
+          </label>
+          <button type="submit" class="primary">Start investigation</button>
+        </form>
+      </section>
+
+      <section id="workspace" class="workspace hidden">
+        <div class="metric-strip">
+          <div><span>Lifecycle</span><strong id="lifecycle">—</strong></div>
+          <div><span>Activations</span><strong id="budget">0 / 6</strong></div>
+          <div><span>Verification</span><strong id="verification">0 / 2 consecutive</strong></div>
+          <div><span>Agent source</span><strong id="agent-source">—</strong></div>
+        </div>
+
+        <div class="grid">
+          <section class="panel observation-card">
+            <p class="kicker">Current observation</p>
+            <h2 id="observation-title">Awaiting evidence</h2>
+            <div id="measurements" class="measurements"></div>
+          </section>
+
+          <section class="panel decision-card">
+            <p class="kicker">Agent's next experiment</p>
+            <h2 id="decision-title">No experiment pending</h2>
+            <p id="decision-rationale" class="rationale">The coordinator is evaluating available evidence.</p>
+            <div id="approval-facts" class="approval-facts"></div>
+            <button id="approve" class="primary" disabled>Approve bounded activation</button>
+          </section>
+
+          <section class="panel hypotheses-card">
+            <div class="section-heading">
+              <div><p class="kicker">Deterministic evidence</p><h2>Competing hypotheses</h2></div>
+              <span id="confidence" class="confidence">UNKNOWN</span>
+            </div>
+            <div id="hypotheses"></div>
+          </section>
+
+          <section class="panel intervention-card">
+            <p class="kicker">Human intervention</p>
+            <h2>Repair checkpoint</h2>
+            <p>Declare what changed before verification begins.</p>
+            <div class="inline-form">
+              <input id="intervention" value="Reconnected the motor lead" aria-label="Intervention description">
+              <button id="declare" disabled>Declare repair</button>
+            </div>
+          </section>
+
+          <section class="panel timeline-card">
+            <p class="kicker">Audit trail</p>
+            <h2>Experiment timeline</h2>
+            <ol id="timeline"></ol>
+          </section>
+
+          <section class="panel report-card">
+            <p class="kicker">Diagnosis report</p>
+            <h2 id="report-title">Investigation in progress</h2>
+            <div id="report"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="approval-dialog">
+      <form method="dialog">
+        <p class="kicker">Physical action approval</p>
+        <h2 id="dialog-title">Approve experiment</h2>
+        <div id="dialog-facts"></div>
+        <p class="warning">Keep hands clear. Emergency stop remains available throughout the pulse.</p>
+        <div class="dialog-actions">
+          <button value="cancel">Cancel</button>
+          <button id="confirm-approval" value="default" class="primary">Approve and execute</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

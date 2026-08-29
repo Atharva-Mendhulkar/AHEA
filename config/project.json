@@ -1,0 +1,12 @@
+{
+  "projectId": "dc-motor-demo",
+  "name": "ESP32-S3 DC motor diagnostic demo",
+  "protocolVersion": "1.0",
+  "pulseDurationMs": 350,
+  "cooldownMs": 2000,
+  "currentLimitMa": 750,
+  "diagnosticActivationLimit": 2,
+  "verificationActivationLimit": 4,
+  "totalActivationLimit": 6,
+  "maximumSensorErrorRate": 0.05
+}

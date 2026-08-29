@@ -1,0 +1,12 @@
+{
+  "enabled": false,
+  "profileId": "SAFE_DISABLED",
+  "boardIdentity": "UNREVIEWED",
+  "serialPath": null,
+  "requirements": [
+    "Reviewed ESP32-S3 pin and electrical profile",
+    "Physical normally-closed emergency-stop input",
+    "Current-limited supply or correctly rated fuse",
+    "MPU6050 at 0x68 and INA219 at 0x40"
+  ]
+}

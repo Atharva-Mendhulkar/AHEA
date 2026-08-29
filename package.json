@@ -1,0 +1,35 @@
+{
+  "name": "ahea-hardware-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch server/index.ts",
+    "start": "tsx server/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:openai": "AHEA_LIVE_OPENAI=1 vitest run tests/openai.live.test.ts",
+    "check": "npm run build && npm test",
+    "firmware:build": "pio run -d firmware",
+    "firmware:test": "pio test -d firmware -e native"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "openai": "^5.20.3",
+    "serialport": "^13.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.0",
+    "supertest": "^7.1.4",
+    "@types/supertest": "^6.0.3",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "defaultFixture": "disconnected",
+  "fixtures": ["disconnected", "healthy", "stalled", "sensor_failure"]
+}
