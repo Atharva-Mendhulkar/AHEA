@@ -19,6 +19,32 @@ export const modelArgumentsSchema = z.object({
   rationale: z.string().trim().min(1).max(500),
 }).strict();
 
+export const calibrationProfileSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  profileId: z.string().min(1),
+  boardIdentity: z.string().min(1),
+  firmwareVersion: z.string().min(1),
+  sensorIdentities: z.object({ motion: z.string().min(1), current: z.string().min(1) }).strict(),
+  capturedAt: z.string().datetime(),
+  sampleCounts: z.object({ inactive: z.number().int().positive(), healthy: z.number().int().positive() }).strict(),
+  sensorErrorRates: z.object({ inactive: z.number().min(0).max(1), healthy: z.number().min(0).max(1) }).strict(),
+  idleCurrentMa: z.number().nonnegative(),
+  healthyCurrentMa: z.number().positive(),
+  baseMotionRmsG: z.number().nonnegative(),
+  healthyMotionRmsG: z.number().positive(),
+  thresholds: z.object({
+    motionMultiplier: z.number().positive(),
+    healthyMotionFraction: z.number().positive(),
+    motionNoiseFloorG: z.number().nonnegative(),
+    idleCurrentMarginMa: z.number().nonnegative(),
+    currentNoiseFloorMa: z.number().nonnegative(),
+    healthyCurrentLowFraction: z.number().positive(),
+    healthyCurrentHighFraction: z.number().positive(),
+    maximumSensorErrorRate: z.number().min(0).max(1),
+  }).strict(),
+}).strict();
+
 export const protocolRequestSchema = z.object({
   id: z.string().min(1).max(80),
   cmd: hardwareCommandSchema.or(z.enum(["hello", "arm_session", "arm_calibration"])),

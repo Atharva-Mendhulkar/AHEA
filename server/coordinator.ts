@@ -26,6 +26,7 @@ export interface CoordinatorOptions {
   agent: DecisionClient;
   serialPath?: string;
   physicalEnabled: boolean;
+  physicalCalibration?: DiagnosisSession["calibration"];
   now?: () => Date;
 }
 
@@ -57,12 +58,22 @@ export class Coordinator {
       await adapter.close();
       throw new DomainError(error instanceof Error ? error.message : "Hardware preflight failed.", 503);
     }
-    if (mode === "physical" && hardware.boardIdentity !== simulationCalibration.boardIdentity) {
+    const calibration = mode === "simulation" ? simulationCalibration : this.options.physicalCalibration;
+    if (!calibration) {
       await adapter.close();
-      throw new DomainError("No reviewed calibration matches the connected physical board/profile.", 409);
+      throw new DomainError("No reviewed physical calibration profile is configured.", 409);
     }
+    if (mode === "physical" && (
+      hardware.boardIdentity !== calibration.boardIdentity ||
+      hardware.firmwareVersion !== calibration.firmwareVersion ||
+      hardware.profileId !== calibration.profileId
+    )) {
+      await adapter.close();
+      throw new DomainError("Calibration does not match the connected board, firmware, and hardware profile.", 409);
+    }
+    await adapter.armSession?.();
     const createdAt = this.now().toISOString();
-    const emptyEvidence = deriveEvidence([], simulationCalibration, false);
+    const emptyEvidence = deriveEvidence([], calibration, false);
     const session: DiagnosisSession = {
       id,
       mode,
@@ -72,7 +83,7 @@ export class Coordinator {
       version: 0,
       lifecycle: "READY",
       hardware,
-      calibration: simulationCalibration,
+      calibration,
       observations: [],
       decisions: [],
       diagnosticActivations: 0,
@@ -253,7 +264,7 @@ export class Coordinator {
     if (!latestMotion) return ["motor_motion_probe"];
     if (!latestMotion.valid) return ["request_sensor_recovery"];
     if (latestMotion.motionDetected) return ["report_fault_not_reproduced"];
-    if (!latestCurrent) return ["motor_current_probe"];
+    if (!latestCurrent) return ["motor_current_probe", "motor_motion_probe"];
     if (!latestCurrent.valid) return ["request_sensor_recovery"];
     return ["request_intervention"];
   }

@@ -2,6 +2,8 @@
 
 Thanks for helping make hardware diagnosis safer and more reproducible.
 
+Start with the [phased roadmap](docs/roadmap.md). Choose work from the earliest incomplete phase unless a maintainer has explicitly approved a later-phase dependency.
+
 ## Development setup
 
 1. Install Node.js 22+, npm, and optionally PlatformIO.

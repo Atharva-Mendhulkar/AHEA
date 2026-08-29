@@ -142,7 +142,7 @@ Browser and model requests never contain raw GPIO, PWM, duration, voltage, curre
 
 ## Physical mode
 
-Do not enable physical mode merely by changing the environment variable. Complete the [hardware bring-up checklist](docs/hardware-bringup.md), replace the safe-disabled firmware profile with reviewed values, capture a matching calibration, and run the hardware-in-loop release gate.
+Do not enable physical mode merely by changing the environment variable. Complete the [hardware bring-up checklist](docs/hardware-bringup.md), replace the safe-disabled firmware profile with reviewed values, capture a matching calibration using `config/calibration.physical.example.json`, set `AHEA_CALIBRATION_PATH`, and run the hardware-in-loop release gate.
 
 INA219 software monitoring is not short-circuit protection. A current-limited supply or correctly rated fuse and a physical emergency-stop button are mandatory.
 

@@ -1,4 +1,4 @@
-const state = { session: null, events: null };
+const state = { session: null, events: null, cooldownTimer: null };
 const $ = (selector) => document.querySelector(selector);
 const labels = {
   motor_motion_probe: "Motor motion probe",
@@ -55,16 +55,23 @@ function render(session) {
   `).join("") || `<p class="rationale">No diagnostic motor observation yet.</p>`;
 
   const pending = session.pendingDecision;
+  const cooldownMs = pending?.cooldownReadyAt ? Math.max(0, new Date(pending.cooldownReadyAt).getTime() - Date.now()) : 0;
   $("#decision-title").textContent = pending ? labels[pending.action] : latestDecision ? latestDecision.selectedAction.replaceAll("_", " ") : "No experiment pending";
   $("#decision-rationale").textContent = pending?.rationale || latestDecision?.rationale || "The coordinator is evaluating available evidence.";
   $("#approval-facts").innerHTML = pending ? [
     `Fixed pulse: ${pending.fixedParameters.durationMs} ms`,
     `Current trip: ${pending.fixedParameters.currentLimitMa} mA`,
-    `Cooldown: ${pending.fixedParameters.cooldownMs / 1000} seconds`,
+    `Cooldown: ${cooldownMs > 0 ? `ready in ${(cooldownMs / 1000).toFixed(1)} seconds` : "ready"}`,
     `Activations remaining: ${pending.activationsRemaining}`,
     `Evidence source: ${session.mode}`,
   ].map((line) => `<span>${escapeHtml(line)}</span>`).join("") : "";
-  $("#approve").disabled = !pending;
+  $("#approve").disabled = !pending || cooldownMs > 0;
+  clearTimeout(state.cooldownTimer);
+  if (pending && cooldownMs > 0) {
+    state.cooldownTimer = setTimeout(async () => {
+      try { render(await api(`/api/sessions/${session.id}`)); } catch (error) { toast(error.message); }
+    }, cooldownMs + 50);
+  }
   $("#declare").disabled = session.lifecycle !== "AWAITING_INTERVENTION";
 
   $("#confidence").textContent = session.evidence.confidenceLabel;

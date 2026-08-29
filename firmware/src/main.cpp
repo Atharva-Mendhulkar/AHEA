@@ -138,7 +138,10 @@ JsonDocument baseSuccess(const String& id, bool activation_accepted, uint32_t el
   result["tripped"] = safety.tripped();
   result["estopLatched"] = safety.estopLatched();
   result["timeout"] = safety.timedOut();
-  result["reasons"].to<JsonArray>();
+  JsonArray reasons = result["reasons"].to<JsonArray>();
+  if (safety.estopLatched()) reasons.add("EMERGENCY_STOP_LATCHED");
+  if (safety.timedOut()) reasons.add("HARD_TIMEOUT");
+  if (safety.tripped() && !safety.timedOut()) reasons.add("CURRENT_OR_SENSOR_SAFETY_TRIP");
   return response;
 }
 
@@ -278,7 +281,7 @@ void processCommand(const String& line) {
   if (command == "hello") return sendHello(id);
   if (command == "scan_i2c") return sendScan(id);
   if (command == "sample_motion") return sendMotionSample(id);
-  if (command == "arm_session") {
+  if (command == "arm_session" || command == "arm_calibration") {
     const bool armed = safety.arm(ahea::profile::PHYSICAL_ENABLED, digitalRead(ahea::profile::ESTOP_PIN) == HIGH);
     if (!armed) return sendError(id, "ARM_REJECTED", "Profile invalid, faulted, or emergency stop active.");
     JsonDocument response = baseSuccess(id, false, 0);
@@ -341,11 +344,14 @@ void loop() {
     }
   }
 
-  if (!active_id.isEmpty() && safety.motorEnabled()) {
+  if (!active_id.isEmpty() && !safety.motorEnabled()) {
+    finishProbe();
+  } else if (!active_id.isEmpty() && safety.motorEnabled()) {
     float current_ma = ina_ready ? ina219.getCurrent_mA() : 0;
     float acceleration_g = 0;
     const bool motion_ok = active_command == "motor_current_probe" || readAccelerationMagnitude(acceleration_g);
-    const bool current_ok = active_command == "motor_motion_probe" || isfinite(current_ma);
+    // INA219 remains mandatory for trip monitoring during every motor pulse.
+    const bool current_ok = ina_ready && isfinite(current_ma);
     samples++;
     if (!motion_ok || !current_ok) sensor_errors++;
     if (current_ok) {
@@ -353,7 +359,11 @@ void loop() {
       current_peak_ma = max(current_peak_ma, current_ma);
     }
     if (motion_ok) accel_square_sum += acceleration_g * acceleration_g;
-    if (!safety.tick(millis(), current_ma, ahea::profile::ABSOLUTE_CURRENT_LIMIT_MA,
+    if (!motion_ok || !current_ok) {
+      safety.fault();
+      motorOff();
+      finishProbe();
+    } else if (!safety.tick(millis(), current_ma, ahea::profile::ABSOLUTE_CURRENT_LIMIT_MA,
                      digitalRead(ahea::profile::ESTOP_PIN) == LOW)) {
       finishProbe();
     }

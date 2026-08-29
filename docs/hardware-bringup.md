@@ -21,7 +21,8 @@ Never power the motor from an ESP32 GPIO or from an unprotected USB rail.
 5. Verify MPU6050 at `0x68` and INA219 at `0x40`.
 6. Run inactive calibration, then an explicitly approved healthy pulse calibration.
 7. Store a calibration profile matching the exact board, firmware, profile, and sensor identities.
-8. Configure `AHEA_SERIAL_PATH` and set `AHEA_PHYSICAL_ENABLED=true` only after all checks pass.
+8. Save the validated profile using `config/calibration.physical.example.json` as the schema reference.
+9. Configure `AHEA_SERIAL_PATH` and `AHEA_CALIBRATION_PATH`, then set `AHEA_PHYSICAL_ENABLED=true` only after all checks pass.
 
 ## Hardware-in-loop release gate
 

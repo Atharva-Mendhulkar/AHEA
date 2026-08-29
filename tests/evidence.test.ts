@@ -40,4 +40,15 @@ describe("deterministic evidence engine", () => {
     const pass2 = await healthy.execute("verify_motor", { ...context, experimentId: "v3" });
     expect(deriveEvidence([pass1, invalid, pass2], simulationCalibration, true).consecutiveVerificationPasses).toBe(1);
   });
+
+  it("derives motion from calibrated raw RMS instead of trusting an adapter boolean", async () => {
+    const adapter = new SimulatorAdapter("healthy");
+    const observation = await adapter.execute("motor_motion_probe", {
+      sessionId: "session", experimentId: "motion", calibration: simulationCalibration,
+    });
+    const reported = observation.measurements.find((item) => item.name === "expected_motion_signature_detected")!;
+    reported.value = false;
+    const evidence = deriveEvidence([observation], simulationCalibration, false);
+    expect(evidence.observations[0]?.motionDetected).toBe(true);
+  });
 });

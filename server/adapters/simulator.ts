@@ -39,6 +39,8 @@ export class SimulatorAdapter implements HardwareAdapter {
     this.interventionDeclared = true;
   }
 
+  async armSession(): Promise<void> {}
+
   async close(): Promise<void> {}
 
   async execute(command: HardwareCommand, context: ExecuteContext): Promise<Observation> {

@@ -63,6 +63,7 @@ export interface Observation {
 export interface CalibrationProfile {
   id: string;
   projectId: string;
+  profileId: string;
   boardIdentity: string;
   firmwareVersion: string;
   sensorIdentities: { motion: string; current: string };

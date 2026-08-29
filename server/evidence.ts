@@ -38,15 +38,17 @@ export function calculateThresholds(calibration: CalibrationProfile) {
 
 export function classifyObservation(observation: Observation, calibration: CalibrationProfile): ObservationEvidence {
   const thresholds = calculateThresholds(calibration);
-  const motionDetected = measurement<boolean>(observation, "expected_motion_signature_detected");
+  const reportedMotion = measurement<boolean>(observation, "expected_motion_signature_detected");
+  const motionRmsG = measurement<number>(observation, "acceleration_rms_g");
+  // Adapters may report a convenience boolean, but calibrated raw evidence is authoritative.
+  const motionDetected = motionRmsG === undefined ? reportedMotion : motionRmsG >= thresholds.motionThresholdG;
   const currentMeanMa = measurement<number>(observation, "current_mean_ma");
   const valid = observationIsValid(observation, calibration);
   const comparisons: string[] = [];
 
   if (motionDetected !== undefined) {
-    const rms = measurement<number>(observation, "acceleration_rms_g");
     comparisons.push(
-      `Motion signature ${motionDetected ? "detected" : "absent"}${rms === undefined ? "" : ` at ${rms.toFixed(3)} g`} (threshold ${thresholds.motionThresholdG.toFixed(3)} g).`,
+      `Motion signature ${motionDetected ? "detected" : "absent"}${motionRmsG === undefined ? "" : ` at ${motionRmsG.toFixed(3)} g`} (threshold ${thresholds.motionThresholdG.toFixed(3)} g).`,
     );
   }
   if (currentMeanMa !== undefined) {

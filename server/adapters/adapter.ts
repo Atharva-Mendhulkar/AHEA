@@ -10,6 +10,7 @@ export interface HardwareAdapter {
   readonly source: "physical" | "simulation";
   readonly name: "esp32" | "simulator";
   preflight(): Promise<HardwareStatus>;
+  armSession?(): Promise<void>;
   execute(command: HardwareCommand, context: ExecuteContext): Promise<Observation>;
   declareIntervention(): void;
   close(): Promise<void>;

@@ -77,6 +77,9 @@ export class SerialAdapter implements HardwareAdapter {
     const hello = await this.request("hello");
     if (!hello.ok || !hello.data) throw new Error(hello.error?.message ?? "Firmware hello failed.");
     const get = (name: string) => hello.data!.measurements.find((item) => item.name === name)?.value;
+    const scan = await this.request("scan_i2c");
+    if (!scan.ok || !scan.data) throw new Error(scan.error?.message ?? "I2C scan failed.");
+    const present = (name: string) => scan.data!.measurements.find((item) => item.name === name)?.value === true;
     this.status = {
       connected: true,
       firmwareVersion: String(get("firmware_version") ?? "unknown"),
@@ -86,10 +89,16 @@ export class SerialAdapter implements HardwareAdapter {
       physicalEnabled: get("physical_enabled") === true,
       estopLatched: hello.data.safety.estopLatched,
       supportedCommands: ["scan_i2c", "sample_motion", "motor_motion_probe", "motor_current_probe", "verify_motor", "emergency_stop"],
-      detectedI2c: [],
+      detectedI2c: [present("ina219_present") ? "0x40" : "", present("mpu6050_present") ? "0x68" : ""].filter(Boolean),
     };
     if (!this.status.physicalEnabled) throw new Error("Firmware hardware profile is safe-disabled.");
+    if (!present("ina219_present") || !present("mpu6050_present")) throw new Error("Required MPU6050 or INA219 sensor is missing.");
     return this.status;
+  }
+
+  async armSession(): Promise<void> {
+    const response = await this.request("arm_session");
+    if (!response.ok) throw new Error(response.error?.message ?? "Firmware refused session arming.");
   }
 
   declareIntervention(): void {}

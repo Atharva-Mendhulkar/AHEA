@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
 import type { CalibrationProfile } from "../shared/domain.js";
+import { calibrationProfileSchema } from "../shared/schemas.js";
 
 export const simulationCalibration: CalibrationProfile = {
   id: "cal-simulator-v1",
   projectId: "dc-motor-demo",
+  profileId: "sim-dc-motor-v1",
   boardIdentity: "SIM-ESP32S3",
   firmwareVersion: "sim-1.0.0",
   sensorIdentities: { motion: "SIM-MPU6050@0x68", current: "SIM-INA219@0x40" },
@@ -31,4 +34,10 @@ export const appConfig = {
   model: process.env.OPENAI_MODEL ?? "gpt-5-mini",
   serialPath: process.env.AHEA_SERIAL_PATH,
   physicalEnabled: process.env.AHEA_PHYSICAL_ENABLED === "true",
+  calibrationPath: process.env.AHEA_CALIBRATION_PATH,
 };
+
+export function loadPhysicalCalibration(filePath = appConfig.calibrationPath): CalibrationProfile | undefined {
+  if (!filePath) return undefined;
+  return calibrationProfileSchema.parse(JSON.parse(readFileSync(filePath, "utf8")));
+}
