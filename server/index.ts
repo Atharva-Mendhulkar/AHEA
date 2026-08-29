@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import { appConfig, loadPhysicalCalibration } from "./config.js";
+import { appConfig } from "./config.js";
 import { JsonStore } from "./store.js";
 import { OpenAIDecisionClient } from "./agent.js";
 import { Coordinator } from "./coordinator.js";
@@ -13,7 +13,6 @@ export function buildApplication() {
     agent,
     serialPath: appConfig.serialPath,
     physicalEnabled: appConfig.physicalEnabled,
-    physicalCalibration: loadPhysicalCalibration(),
   });
   return { app: createApp(coordinator), coordinator };
 }

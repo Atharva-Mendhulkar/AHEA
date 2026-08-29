@@ -2,7 +2,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSessionSchema, executeDecisionSchema, interventionSchema, problemSchema } from "../shared/schemas.js";
-import { simulationCalibration } from "./config.js";
+import { defaultProjectContext } from "./config.js";
 import { Coordinator, DomainError } from "./coordinator.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,7 +21,7 @@ export function createApp(coordinator: Coordinator) {
 
   app.post("/api/sessions", asyncRoute(async (request, response) => {
     const input = createSessionSchema.parse(request.body);
-    const session = await coordinator.createSession(input.mode, input.fixture);
+    const session = await coordinator.createSession(input.mode, input.fixture, input.projectContext, input.targetDeviceId);
     response.status(201).json(session);
   }));
 
@@ -34,19 +34,35 @@ export function createApp(coordinator: Coordinator) {
     response.json(await coordinator.submitProblem(String(request.params.id), problem));
   }));
 
+  app.post("/api/sessions/:id/investigation/start", asyncRoute(async (request, response) => {
+    response.json(await coordinator.startInvestigation(String(request.params.id)));
+  }));
+
+  app.post("/api/sessions/:id/investigation/advance", asyncRoute(async (request, response) => {
+    response.json(await coordinator.advanceInvestigation(String(request.params.id)));
+  }));
+
+  app.get("/api/sessions/:id/devices/:deviceId/guidance", asyncRoute(async (request, response) => {
+    response.json(await coordinator.deviceGuidance(String(request.params.id), String(request.params.deviceId)));
+  }));
+
+  app.post("/api/sessions/:id/devices/:deviceId/live-reading", asyncRoute(async (request, response) => {
+    response.json(await coordinator.captureLiveReading(String(request.params.id), String(request.params.deviceId)));
+  }));
+
   app.get("/api/sessions/:id/pending-decision", asyncRoute(async (request, response) => {
     const session = await coordinator.getSession(String(request.params.id));
     response.json({ pendingDecision: session.pendingDecision ?? null, lifecycle: session.lifecycle, version: session.version });
   }));
 
   app.post("/api/sessions/:id/decisions/:decisionId/execute", asyncRoute(async (request, response) => {
-    const { expectedVersion } = executeDecisionSchema.parse(request.body);
-    response.json(await coordinator.executePending(String(request.params.id), String(request.params.decisionId), expectedVersion));
+    const { expectedVersion, setupConfirmed } = executeDecisionSchema.parse(request.body);
+    response.json(await coordinator.executePending(String(request.params.id), String(request.params.decisionId), expectedVersion, setupConfirmed));
   }));
 
   app.post("/api/sessions/:id/interventions", asyncRoute(async (request, response) => {
-    const { description } = interventionSchema.parse(request.body);
-    response.json(await coordinator.declareIntervention(String(request.params.id), description));
+    const { description, recommendationId } = interventionSchema.parse(request.body);
+    response.json(await coordinator.declareIntervention(String(request.params.id), description, recommendationId));
   }));
 
   app.post("/api/sessions/:id/emergency-stop", asyncRoute(async (request, response) => {
@@ -74,15 +90,7 @@ export function createApp(coordinator: Coordinator) {
     });
   }));
 
-  app.get("/api/calibration", (_request, response) => {
-    response.json({ profile: simulationCalibration, source: "simulation-reference", physicalCaptureEnabled: false });
-  });
-  app.post("/api/calibration/inactive", (_request, response) => {
-    response.status(409).json({ error: "Operator physical calibration is unavailable while the hardware profile is safe-disabled." });
-  });
-  app.post("/api/calibration/healthy", (_request, response) => {
-    response.status(409).json({ error: "Healthy-pulse calibration requires a reviewed physical profile and explicit activation approval." });
-  });
+  app.get("/api/project-context/default", (_request, response) => response.json(defaultProjectContext));
 
   app.use(express.static(path.resolve(here, "../web")));
   app.get("/{*path}", (request, response, next) => {

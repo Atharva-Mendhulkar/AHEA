@@ -1,38 +1,30 @@
 #include <cassert>
 #include "safety_state.h"
-
 using namespace ahea;
 
 int main() {
-  SafetyMachine safety(350, 500, 2000, 6, 2, 4);
-  assert(!safety.arm(false, true));
-  assert(safety.arm(true, true));
-  assert(safety.start(ProbeKind::Motion, 0, true) == StartResult::Accepted);
-  assert(safety.motorEnabled());
-  assert(!safety.tick(350, 100, 750, false));
-  assert(safety.start(ProbeKind::Current, 400, true) == StartResult::Cooldown);
-  assert(safety.start(ProbeKind::Current, 2400, true) == StartResult::Accepted);
-  assert(!safety.tick(2410, 800, 750, false));
-  assert(safety.tripped());
-
-  SafetyMachine estop(350, 500, 2000, 6, 2, 4);
-  assert(estop.arm(true, true));
-  assert(estop.start(ProbeKind::Motion, 0, true) == StartResult::Accepted);
-  assert(!estop.tick(1, 20, 750, true));
-  assert(estop.estopLatched());
-  assert(!estop.arm(true, true));
-
-  SafetyMachine budget(10, 20, 0, 6, 2, 4);
-  assert(budget.arm(true, true));
-  assert(budget.start(ProbeKind::Motion, 0, true) == StartResult::Accepted);
-  budget.finish(10);
-  assert(budget.start(ProbeKind::Current, 10, true) == StartResult::Accepted);
-  budget.finish(20);
-  assert(budget.start(ProbeKind::Current, 20, true) == StartResult::DiagnosticBudgetExhausted);
-  for (int i = 0; i < 4; i++) {
-    assert(budget.start(ProbeKind::Verification, 30 + i * 10, true) == StartResult::Accepted);
-    budget.finish(40 + i * 10);
-  }
-  assert(budget.start(ProbeKind::Verification, 100, true) == StartResult::BudgetExhausted);
+  SafetyMachine disabled(100, 2);
+  assert(!disabled.arm(false));
+  SafetyMachine safety(100, 2);
+  assert(safety.arm(true));
+  assert(safety.start(OperationClass::Read, 0) == StartResult::Accepted);
+  assert(safety.running());
+  assert(safety.tick(50));
+  safety.finish();
+  assert(safety.start(OperationClass::Actuation, 60, false) == StartResult::OperationDisabled);
+  assert(safety.start(OperationClass::TimedIo, 60) == StartResult::Accepted);
+  assert(!safety.tick(161));
+  assert(safety.timedOut());
+  SafetyMachine stopped(100, 4);
+  assert(stopped.arm(true));
+  assert(stopped.start(OperationClass::Read, 0) == StartResult::Accepted);
+  assert(!stopped.tick(1, true));
+  assert(stopped.estopLatched());
+  assert(!stopped.arm(true));
+  SafetyMachine budget(100, 1);
+  assert(budget.arm(true));
+  assert(budget.start(OperationClass::Read, 0) == StartResult::Accepted);
+  budget.finish();
+  assert(budget.start(OperationClass::Read, 1) == StartResult::BudgetExhausted);
   return 0;
 }

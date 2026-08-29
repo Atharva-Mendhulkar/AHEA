@@ -1,28 +1,14 @@
 # Safety model
 
-This project is a hackathon prototype, not certified safety equipment.
+AHEA is a prototype, not certified test equipment.
 
-## Independent layers
+- The model chooses only backend-offered experiment IDs.
+- The gateway validates device membership, plan identity, lifecycle, setup confirmation, intervention, and budget.
+- Firmware resolves logical device IDs to compile-time bindings and applies its own operation budget and timeout.
+- Simulation and physical evidence are immutable and isolated.
+- FSR candidate values come only from project configuration and deterministic divider calculations.
+- Physical component replacement always requires human approval and power disconnection.
 
-- The browser requires explicit confirmation before every motor activation.
-- The coordinator validates decision identity, session version, ordering, cooldown, and budgets immediately before execution.
-- The adapter accepts semantic commands only and sends empty firmware arguments.
-- Firmware owns fixed pins, direction, duty, duration, absolute current limit, local timeout, cooldown, activation counts, overlap rejection, deduplication, sensor checks, watchdog, and e-stop latching.
-- Hardware must include a current-limited supply or fuse. INA219 sampling is monitoring, not short-circuit protection.
+The sensor-first profile contains no enabled actuation. Servo and relay operations are unavailable. A bare 5 V relay must never be connected directly to an ESP32 GPIO; it requires an appropriate driver and flyback protection. HC-SR04 echo must not reach an ESP32 input until 5 V-to-3.3 V protection is reviewed.
 
-## Fail-safe conditions
-
-Motor outputs must be LOW on boot, reset, brownout, malformed input, unknown command, sensor failure, watchdog failure, timeout, overcurrent, profile mismatch, and emergency stop. A serial or Node failure cannot extend a pulse beyond the firmware timeout.
-
-The emergency stop must be a physical input in addition to the UI/serial command. Once latched it can only be cleared by a physical ESP32 reset.
-
-## Activation accounting
-
-- Diagnostic limit: two accepted motor activations
-- Verification limit: four accepted motor activations
-- Total limit: six accepted motor activations
-- Required result: two consecutive valid verification passes
-- Any failed or invalid verification resets the pass counter
-- Calibration is a separate operator workflow but retains approval and all firmware limits
-
-Rejected commands do not consume the accepted-activation budget. Once the firmware energizes the motor, the activation counts even if the resulting measurement is invalid or trips.
+The bundled firmware profile is safe-disabled. Unknown bindings, plans, malformed input, duplicate requests, operation overlap, timeouts, exhausted budgets, and abort state fail closed.

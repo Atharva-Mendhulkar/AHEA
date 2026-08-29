@@ -1,53 +1,43 @@
 # Architecture
 
-## Trust boundaries
+## Runtime flow
 
-The system is a modular monolith on the laptop and a separate deterministic firmware target.
-
-1. The dashboard submits intent and approvals; it has no hardware parameter interface.
-2. The coordinator owns workflow state and creates version-bound pending decisions.
-3. The agent proposes one semantic action from the currently offered set.
-4. The gateway checks action ordering, state, budget, e-stop, and evidence preconditions.
-5. The selected adapter executes the semantic command and returns normalized facts.
-6. The evidence engine derives hypothesis support and confidence without model input.
-7. The coordinator records the result and requests a fresh decision.
-
-The dashboard keeps Evidence, Hypotheses, Timeline, and Report as separate in-app views. The Evidence view animates only sample arrays carried by canonical observations; it does not fabricate physical readings in the browser.
-
-## Runtime data flow
-
-```mermaid
-sequenceDiagram
-  participant U as User/dashboard
-  participant C as Coordinator
-  participant A as Decision client
-  participant G as Safety gateway
-  participant D as Adapter/device
-  participant E as Evidence engine
-
-  U->>C: Submit high-level problem
-  C->>A: Context, observations, allowed actions
-  A-->>C: Semantic action + concise rationale
-  C->>G: Validate action and preconditions
-  C-->>U: Pending decision and fixed safety facts
-  U->>C: Approve decision ID + session version
-  C->>G: Revalidate atomically
-  C->>D: Semantic command with empty args
-  D-->>C: Canonical observation
-  C->>E: Observation + referenced calibration
-  E-->>C: Deterministic evidence view
-  C->>A: New evidence / tool output
+```text
+Project context + trusted hardware profile
+                 ↓
+Eligible semantic experiments
+                 ↓
+Agent selection → safety gateway → bounded recording state
+                                      ↓
+                           simulator or ESP32 adapter
+                                      ↓
+                           canonical observation
+                                      ↓
+                  deterministic evidence and tuning
+                                      ↓
+                       next experiment or stop
 ```
 
-## State ownership
+The project context describes intended behavior, device roles, reference groups, procedures, and allowed modifications. The trusted firmware profile maps logical bindings to fixed pins and electrical settings. The model sees semantic device/experiment identities but cannot author hardware parameters.
 
-- `SETUP → READY → INVESTIGATING → AWAITING_INTERVENTION → VERIFYING → CONFIRMED`
-- `INTERRUPTED`, `FAILED`, and `ESTOPPED` are terminal in the MVP.
-- The model cannot emit lifecycle state, confidence, or counters.
-- A session's source is immutable and checked on every observation.
-- Current probing requires a valid absent-motion observation from the same session.
-- Confirmation requires a declared intervention and two consecutive passing verification observations.
+## Preserved trust boundaries
 
-## Persistence
+1. The browser submits project intent, one investigation start action, and explicit physical-intervention declarations.
+2. The coordinator owns lifecycle, agent state, immutable source, context digest, budgets, read authorization, and audit events.
+3. The agent selects one experiment from a backend-generated eligible list.
+4. The gateway revalidates the opaque experiment ID and every prerequisite.
+5. Adapters preserve physical/simulation provenance and normalize firmware responses.
+6. The evidence engine computes statistics, hypotheses, recommendations, confidence, and verification.
+7. Firmware accepts registered device and plan IDs only and independently bounds operations.
 
-Current session snapshots are stored as local JSON for restart inspection. Timeline events are additionally appended to per-session NDJSON audit logs. OpenAI continuation items are retained only in process memory and are not surfaced as audit rationale.
+Built-in modules cover MPU6050, DHT11, HC-SR04, and FSR. Servo and relay descriptors deliberately expose no executable commands in the sensor-first MVP. The extension point is local; there is no remote catalog or installer.
+
+## Agent orchestration and controlled evidence
+
+`DiagnosisSession.agentState` drives the visible experience. After one start action, the frontend calls the bounded advance endpoint while the session is active. The coordinator—not the browser—chooses the experiment, captures a baseline, evaluates device-specific signal sufficiency, runs the approved bounded evidence window, updates deterministic evidence, and selects the next state. SSE continues to carry audited transitions.
+
+Baseline and stimulus probes are `monitoring` observations. They use the same semantic-command, profile, adapter, provenance, timeout, and audit boundaries as diagnostic experiments, but remain excluded from deterministic diagnosis and verification. Only the subsequent gateway-validated `diagnostic` or `verification` window updates reference statistics, hypotheses, recommendations, confidence, or consecutive-pass state.
+
+The deterministic sufficiency evaluator checks operation acceptance, sensor health, sample coverage, device-specific change from baseline, and configured stability thresholds. Eight unsuccessful probes end the active measurement as `INCONCLUSIVE`; neither the model nor the frontend can extend that bound.
+
+Sessions use schema version 2. Legacy current-based sessions are preserved on disk but rejected rather than reinterpreted.

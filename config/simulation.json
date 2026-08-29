@@ -1,4 +1,4 @@
 {
-  "defaultFixture": "disconnected",
-  "fixtures": ["disconnected", "healthy", "stalled", "sensor_failure"]
+  "defaultFixture": "fsr_outlier_compensable",
+  "fixtures": ["fsr_balanced", "fsr_outlier_compensable", "fsr_noisy", "fsr_read_failure"]
 }

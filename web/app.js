@@ -1,404 +1,142 @@
-const state = {
-  session: null,
-  events: null,
-  cooldownTimer: null,
-  activeView: "evidence",
-  viewAnimation: null,
-  plotFrames: new Map(),
-  plotKeys: new Map(),
-  plotResizeFrame: null,
-};
 const $ = (selector) => document.querySelector(selector);
-const labels = {
-  motor_motion_probe: "Motor motion probe",
-  motor_current_probe: "Motor current probe",
-  verify_motor: "Motor verification pulse",
-};
+const state = { session: null, events: null, loopRunning: false, loopToken: 0 };
+const ACTIVE_STATES = new Set(["INITIALIZING", "WAITING_FOR_USER_STIMULUS", "RECORDING", "ANALYZING", "SELECTING_NEXT_EXPERIMENT", "POST_INTERVENTION_VERIFY"]);
 
-function setTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  localStorage.setItem("ahea-theme", theme);
-  const next = theme === "dark" ? "Light" : "Dark";
-  $("#theme-label").textContent = `${next} mode`;
-  $("#theme-toggle").setAttribute("aria-label", `Switch to ${next.toLowerCase()} mode`);
-  $("#theme-toggle").setAttribute("aria-pressed", String(theme === "dark"));
-  state.plotKeys.clear();
-  if (state.session) renderPlots(state.session);
-}
-
-function setBusy(button, busy, busyLabel) {
-  if (!button.dataset.label) button.dataset.label = button.textContent;
-  button.disabled = busy;
-  button.setAttribute("aria-busy", String(busy));
-  button.textContent = busy ? busyLabel : button.dataset.label;
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
+async function api(path, options = {}) {
+  const response = await fetch(path, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
   return body;
 }
+function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]); }
+function toast(message) { const node = $("#toast"); node.textContent = message; node.classList.add("show"); setTimeout(() => node.classList.remove("show"), 3500); }
+function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+function formatNumber(value, unit = "") { if (typeof value !== "number") return "—"; const number = Number.isInteger(value) ? String(value) : value.toFixed(Math.abs(value) < 10 ? 3 : 1); return `${number}${unit ? ` ${unit}` : ""}`; }
+function device(session, id = session.targetDeviceId) { return session.projectContext.components.find((item) => item.id === id); }
+function primaryChannel(type) { return ({ fsr: "adc_mean", mpu6050: "acceleration_magnitude_g", dht11: "temperature_c", hc_sr04: "distance_cm" })[type]; }
+function latestObservation(session, predicate = () => true) { return [...session.observations].reverse().find(predicate); }
+function terminal(session) { return ["CONFIRMED", "CONCLUDED", "FAILED", "INTERRUPTED", "ESTOPPED"].includes(session.lifecycle); }
 
-function toast(message) {
-  const element = $("#toast");
-  element.textContent = message;
-  element.classList.add("show");
-  setTimeout(() => element.classList.remove("show"), 3500);
-}
-
-function valueText(value, unit) {
-  if (typeof value === "number") return `${Number.isInteger(value) ? value : value.toFixed(3)} ${unit}`;
-  return `${value}`;
-}
-
-function switchView(view, updateHistory = true) {
-  const names = ["evidence", "hypotheses", "timeline", "report"];
-  if (!names.includes(view)) view = "evidence";
-  const previous = state.activeView;
-  state.activeView = view;
-  document.querySelectorAll(".section-tab").forEach((tab) => {
-    const active = tab.dataset.view === view;
-    tab.classList.toggle("active", active);
-    tab.setAttribute("aria-selected", String(active));
-  });
-  document.querySelectorAll(".workspace-page").forEach((page) => {
-    page.hidden = page.dataset.page !== view;
-  });
-  const page = $(`#view-${view}`);
-  state.viewAnimation?.cancel();
-  if (!matchMedia("(prefers-reduced-motion: reduce)").matches && page && previous !== view) {
-    const direction = names.indexOf(view) >= names.indexOf(previous) ? 1 : -1;
-    state.viewAnimation = page.animate(
-      [
-        { opacity: 0, transform: `translateX(${direction * 14}px) scale(.995)` },
-        { opacity: 1, transform: "translateX(0) scale(1)" },
-      ],
-      { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" },
-    );
+function agentCopy(session) {
+  const active = session.activeExperiment; const target = device(session, active?.deviceId || session.targetDeviceId); const references = session.projectContext.expectedBehavior.referenceDeviceIds.length;
+  const trials = session.projectContext.procedures.fsrStimulus.trialsPerDevice;
+  const completedReferences = session.projectContext.expectedBehavior.referenceDeviceIds.filter((id) => session.observations.filter((item) => item.phase === "diagnostic" && item.deviceId === id).length >= trials).length;
+  switch (session.agentState) {
+    case "IDLE": return { label: "Ready to investigate", message: `I’ll compare ${target?.label || session.targetDeviceId} against ${references} known-good sensors.`, detail: "Start once. I’ll request physical input only when a bounded experiment needs it." };
+    case "INITIALIZING": return { label: "Preparing experiment", message: active?.statusMessage || `I’m preparing a bounded measurement for ${target?.label || "the sensor"}.`, detail: "Checking the configured sensor channel and capturing a clean baseline." };
+    case "WAITING_FOR_USER_STIMULUS": return { label: "Waiting for physical input", message: active?.prompt || "Apply the requested input now.", detail: active?.statusMessage || "I’m watching for a meaningful response." };
+    case "RECORDING": return { label: "Recording physical response", message: active?.stimulusDetected ? "Signal detected. Keep the input steady." : "Collecting enough signal…", detail: "I’ll stop automatically when this bounded sample is trustworthy." };
+    case "ANALYZING": return { label: "Analyzing response", message: "That’s enough data. I’m comparing it with the known-good reference range.", detail: "Checking stability, deviation, sensor health, and competing explanations." };
+    case "SELECTING_NEXT_EXPERIMENT": {
+      const next = device(session, session.pendingDecision?.experiment.targetDeviceId); const isReference = next?.role === "reference";
+      return { label: "Choosing the next measurement", message: isReference ? `I need a comparable response from ${next.label} (${Math.min(completedReferences + 1, references)} of ${references} references).` : `I need another bounded response from ${next?.label || "the configured sensor"}.`, detail: "Move to the named sensor. I’ll capture its baseline and detect the response automatically." };
+    }
+    case "WAITING_FOR_INTERVENTION": return { label: "Adjustment recommended", message: "The evidence supports a bounded physical adjustment.", detail: "Nothing changes automatically. Disconnect power, make the declared change, then tell me to verify it." };
+    case "POST_INTERVENTION_VERIFY": return { label: "Repair recorded", message: "I’ll verify the adjustment against the original reference range now.", detail: "The verification run uses the same bounded measurement and requires consecutive passing evidence." };
+    case "CONFIRMED": return { label: "Adjustment verified", message: `${session.targetDeviceId.toUpperCase()} now falls within the known-good range.`, detail: session.mode === "simulation" ? "Simulation passed. Physical confirmation is still required." : "The required consecutive physical verification checks passed." };
+    case "DIAGNOSIS_READY": return session.evidence.state === "NORMAL"
+      ? { label: "Sensor check complete", message: `${session.targetDeviceId.toUpperCase()} is behaving within the expected range.`, detail: "No hardware modification is justified. The original problem is more likely elsewhere in the project." }
+      : { label: "Diagnosis ready", message: "The available evidence is sufficient for this conclusion.", detail: "Review the measured deviation and the next safe action below." };
+    case "INCONCLUSIVE": return { label: "Evidence is insufficient", message: session.failureReason || "I couldn’t collect a trustworthy response within the bounded window.", detail: "Check the connection or stimulus, then retry without changing the safety limits." };
+    default: return { label: "Agent paused", message: "The investigation is waiting.", detail: "No hardware operation is active." };
   }
-  if (view === "evidence" && state.session) renderPlots(state.session);
-  if (updateHistory && location.hash !== `#${view}`) history.pushState({ view }, "", `#${view}`);
 }
 
-function latestSeries(session, name) {
-  for (const observation of [...session.observations].reverse()) {
-    const series = observation.series?.find((candidate) => candidate.name === name);
-    if (series) return { observationId: observation.id, ...series };
-  }
-  return null;
+function resizeCanvas(canvas, height = 300) {
+  const ratio = window.devicePixelRatio || 1; const width = Math.max(canvas.clientWidth, 320);
+  canvas.width = width * ratio; canvas.height = height * ratio;
+  const context = canvas.getContext("2d"); context.scale(ratio, ratio); context.clearRect(0, 0, width, height);
+  return { context, width, height };
+}
+function colors() { const css = getComputedStyle(document.documentElement); return { foreground: css.getPropertyValue("--foreground").trim(), muted: css.getPropertyValue("--muted-foreground").trim(), border: css.getPropertyValue("--border").trim(), accent: css.getPropertyValue("--accent").trim(), success: css.getPropertyValue("--success").trim(), warning: css.getPropertyValue("--warning").trim() }; }
+function drawLiveGraph(session) {
+  const canvas = $("#state-graph"); const { context, width, height } = resizeCanvas(canvas); const palette = colors(); const active = session.activeExperiment; const target = device(session, active?.deviceId || session.targetDeviceId); const channel = target ? primaryChannel(target.type) : undefined;
+  const started = active ? new Date(active.startedAt).getTime() : 0;
+  const observations = session.observations.filter((item) => item.deviceId === target?.id && new Date(item.capturedAt).getTime() >= started);
+  const points = observations.flatMap((item) => item.series?.find((series) => series.channel === channel || series.deviceId === target?.id)?.values || item.measurements.filter((entry) => entry.channel === channel && typeof entry.value === "number").map((entry) => entry.value));
+  $("#graph-title").textContent = `${target?.label || "Sensor"} live response`; $("#graph-mode").textContent = session.mode === "physical" ? "Live · ESP32" : "Live · simulation";
+  if (!points.length) { $("#graph-empty").hidden = false; $("#graph-legend").innerHTML = ""; return; }
+  $("#graph-empty").hidden = true;
+  const baseline = active?.baseline; const reference = session.evidence.reference; const values = [...points, ...(baseline === undefined ? [] : [baseline]), ...(reference ? [reference.rangeRaw[0], reference.rangeRaw[1]] : [])];
+  const min = Math.min(...values); const max = Math.max(...values); const pad = Math.max((max - min) * .16, 1); const low = min - pad; const high = max + pad; const x = (index) => 18 + index / Math.max(points.length - 1, 1) * (width - 36); const y = (value) => height - 24 - (value - low) / Math.max(high - low, 1) * (height - 48);
+  if (reference) { context.fillStyle = "rgba(22, 121, 75, .12)"; const top = y(reference.rangeRaw[1]); context.fillRect(0, top, width, Math.max(y(reference.rangeRaw[0]) - top, 2)); }
+  if (baseline !== undefined) { context.setLineDash([5, 5]); context.strokeStyle = palette.muted; context.beginPath(); context.moveTo(0, y(baseline)); context.lineTo(width, y(baseline)); context.stroke(); context.setLineDash([]); }
+  context.strokeStyle = palette.accent; context.lineWidth = 2.5; context.lineJoin = "round"; context.lineCap = "round"; context.beginPath(); points.forEach((value, index) => index ? context.lineTo(x(index), y(value)) : context.moveTo(x(index), y(value))); context.stroke();
+  context.fillStyle = palette.accent; context.beginPath(); context.arc(x(points.length - 1), y(points.at(-1)), 4, 0, Math.PI * 2); context.fill();
+  $("#graph-legend").innerHTML = `<span><i class="legend-line live"></i>Live response</span>${baseline === undefined ? "" : '<span><i class="legend-line baseline"></i>Baseline</span>'}${reference ? '<span><i class="legend-band"></i>Reference range</span>' : ""}`;
+}
+function drawComparisonGraph(session, verification = false) {
+  const canvas = $("#state-graph"); const { context, width, height } = resizeCanvas(canvas); const palette = colors(); const reference = session.evidence.reference; const subject = session.evidence.subject;
+  if (!reference || !subject) { $("#graph-empty").hidden = false; return; }
+  $("#graph-empty").hidden = true; const tolerance = session.projectContext.expectedBehavior.toleranceFraction; const low = reference.meanRaw * (1 - tolerance); const high = reference.meanRaw * (1 + tolerance); const verificationObservation = latestObservation(session, (item) => item.phase === "verification" && item.deviceId === session.targetDeviceId); const after = verificationObservation?.measurements.find((item) => item.channel === "adc_mean" && typeof item.value === "number")?.value;
+  const values = [high, subject.meanRaw, ...(typeof after === "number" ? [after] : [])]; const limit = Math.max(...values) * 1.18; const left = 132; const scale = (value) => left + value / Math.max(limit, 1) * (width - left - 30); const rows = [{ label: "Known-good", value: reference.meanRaw, color: palette.success }, { label: verification ? "Before" : session.targetDeviceId.toUpperCase(), value: subject.meanRaw, color: palette.warning }, ...(verification && typeof after === "number" ? [{ label: "After", value: after, color: palette.accent }] : [])];
+  const bandLeft = scale(low); const bandWidth = scale(high) - bandLeft; context.fillStyle = "rgba(22, 121, 75, .11)"; context.fillRect(bandLeft, 22, bandWidth, height - 44); context.font = "12px system-ui";
+  rows.forEach((row, index) => { const y = 68 + index * Math.min(74, 190 / rows.length); context.fillStyle = palette.muted; context.fillText(row.label, 12, y + 5); context.fillStyle = row.color; context.fillRect(left, y - 14, Math.max(scale(row.value) - left, 3), 28); context.fillStyle = palette.foreground; context.fillText(row.value.toFixed(1), Math.min(scale(row.value) + 8, width - 48), y + 5); });
+  $("#graph-title").textContent = verification ? "Before vs after adjustment" : "Expected vs observed"; $("#graph-mode").textContent = `${(subject.referenceDeviationFraction * 100).toFixed(1)}% deviation`;
+  $("#graph-legend").innerHTML = `<span><i class="legend-band"></i>Allowed range ±${(tolerance * 100).toFixed(0)}%</span><span><i class="legend-line reference"></i>Reference mean</span><span><i class="legend-line subject"></i>${verification ? "Before / after" : "Observed"}</span>`;
+}
+function renderGraph(session) {
+  const comparisonStates = new Set(["ANALYZING", "WAITING_FOR_INTERVENTION", "DIAGNOSIS_READY", "CONFIRMED"]);
+  if (comparisonStates.has(session.agentState) && session.evidence.reference && session.evidence.subject) drawComparisonGraph(session, session.phase === "verification" || session.agentState === "CONFIRMED");
+  else drawLiveGraph(session);
 }
 
-function renderPlots(session) {
-  drawPlot("motion", latestSeries(session, "motion_rms_g"));
-  drawPlot("current", latestSeries(session, "current_ma"));
+function renderAnalysis(session) {
+  const evidence = session.evidence; const visible = ["ANALYZING", "WAITING_FOR_INTERVENTION", "DIAGNOSIS_READY", "CONFIRMED", "INCONCLUSIVE"].includes(session.agentState) && evidence.state !== "INSUFFICIENT_EVIDENCE";
+  $("#analysis-view").classList.toggle("hidden", !visible);
+  if (!visible) return;
+  const reference = evidence.reference; const subject = evidence.subject; const deviation = subject && reference ? subject.meanRaw - reference.meanRaw : undefined; const stateTitle = evidence.verificationStatus === "PASSED" ? "Adjustment verified" : evidence.state === "NORMAL" ? "Sensor response is healthy" : "A repeatable response deviation is present";
+  $("#analysis-summary").innerHTML = `<p class="eyebrow">Agent assessment</p><h3>${escapeHtml(stateTitle)}</h3><p>${escapeHtml(evidence.state === "NORMAL" ? `${session.targetDeviceId.toUpperCase()} falls inside the configured known-good tolerance.` : subject && reference ? `${session.targetDeviceId.toUpperCase()} responds consistently, but its mean is ${Math.abs(subject.referenceDeviationFraction * 100).toFixed(1)}% ${deviation < 0 ? "below" : "above"} the reference mean.` : "The current evidence identifies a measurement problem that must be resolved before tuning.")}</p>`;
+  $("#evidence-facts").innerHTML = reference && subject ? [["Expected", `${reference.meanRaw.toFixed(1)} ± ${(reference.meanRaw * session.projectContext.expectedBehavior.toleranceFraction).toFixed(1)} ADC`], ["Reference spread", `${reference.rangeRaw[0].toFixed(1)}–${reference.rangeRaw[1].toFixed(1)}`], ["Observed", `${subject.meanRaw.toFixed(1)} ADC`], ["Deviation", `${deviation >= 0 ? "+" : ""}${deviation.toFixed(1)} ADC · ${(subject.referenceDeviationFraction * 100).toFixed(1)}%`], ["Reference coverage", `${reference.deviceIds.length} sensors`], ["Signal stability", subject.stddevRaw <= (device(session)?.expected.maximumSampleStddevRaw || 0) ? "Good" : "Unstable"]].map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("") : `<p>${escapeHtml(evidence.limitations[0] || "Evidence is incomplete.")}</p>`;
+  const strength = { SUPPORTED: "HIGH", PLAUSIBLE: "MEDIUM", WEAKENED: "LOW", UNTESTED: "UNTESTED" }; $("#hypotheses").innerHTML = evidence.hypotheses.map((item) => `<div class="hypothesis"><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.reasons[0] || item.limitations[0] || "Not supported by current evidence.")}</small></div><span class="hypothesis-status" data-status="${item.status}">${strength[item.status]}</span></div>`).join("");
+  const projectChecks = $("#project-checks"); projectChecks.classList.toggle("hidden", evidence.state !== "NORMAL"); projectChecks.innerHTML = evidence.state === "NORMAL" ? `<p class="eyebrow">Likely project-level causes</p><h3>The sensor itself is unlikely to be the problem</h3><ol>${evidence.projectLevelChecks.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>` : "";
+  const recommendation = evidence.recommendations[0]; $("#recommendation").innerHTML = recommendation ? `<article class="recommendation-card"><div><p class="eyebrow">Jugaad opportunity · ${escapeHtml(recommendation.confidence)} confidence</p><h3>${escapeHtml(recommendation.candidateModification)}</h3><p>${escapeHtml(recommendation.reason)}</p></div><div class="recommendation-details"><p><span>Expected effect</span>${escapeHtml(recommendation.expectedEffect)}</p><p><span>Trade-off</span>This compensates for the sampled response but does not prove the FSR is healthy across its full range.</p><p><span>Verification</span>${escapeHtml(recommendation.verificationProcedure)}</p></div></article>` : "";
 }
 
-function drawPlot(kind, series) {
-  const canvas = $(`#${kind}-plot`);
-  const empty = $(`#${kind}-empty`);
-  const reading = $(`#${kind}-reading`);
-  const duration = $(`#${kind}-duration`);
-  const previousFrame = state.plotFrames.get(kind);
-  if (previousFrame) cancelAnimationFrame(previousFrame);
-  const bounds = canvas.getBoundingClientRect();
-  if (bounds.width < 2 || bounds.height < 2) {
-    state.plotKeys.delete(kind);
-    return;
-  }
-  if (!series?.values?.length) {
-    empty.hidden = false;
-    reading.textContent = `— ${kind === "motion" ? "g" : "mA"}`;
-    duration.textContent = "—";
-    const context = canvas.getContext("2d");
-    context?.clearRect(0, 0, canvas.width, canvas.height);
-    return;
-  }
-  empty.hidden = true;
-  duration.textContent = `${series.values.length * series.sampleIntervalMs} ms`;
-  const theme = document.documentElement.dataset.theme;
-  const key = `${series.observationId}:${theme}:${canvas.clientWidth}`;
-  const animate = state.plotKeys.get(kind) !== key && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-  state.plotKeys.set(kind, key);
-  const started = performance.now();
-  const totalDuration = Math.max(360, series.values.length * series.sampleIntervalMs);
-
-  const frame = (now) => {
-    const progress = animate ? Math.min(1, (now - started) / totalDuration) : 1;
-    const visibleCount = Math.max(1, Math.ceil(series.values.length * progress));
-    paintPlot(canvas, series.values.slice(0, visibleCount), kind, series.values);
-    const current = series.values[visibleCount - 1];
-    reading.textContent = `${formatReading(current, series.unit)} ${series.unit}`;
-    if (progress < 1) state.plotFrames.set(kind, requestAnimationFrame(frame));
-    else state.plotFrames.delete(kind);
-  };
-  state.plotFrames.set(kind, requestAnimationFrame(frame));
-}
-
-function paintPlot(canvas, values, kind, fullSeries = values) {
-  const bounds = canvas.getBoundingClientRect();
-  const ratio = Math.min(devicePixelRatio || 1, 2);
-  const width = Math.max(1, Math.round(bounds.width * ratio));
-  const height = Math.max(1, Math.round(bounds.height * ratio));
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
-  const context = canvas.getContext("2d");
-  context.clearRect(0, 0, width, height);
-  if (!values.length) return;
-  const styles = getComputedStyle(document.documentElement);
-  const color = kind === "motion" ? styles.getPropertyValue("--accent").trim() : styles.getPropertyValue("--success").trim();
-  const minimum = Math.min(...fullSeries);
-  const maximum = Math.max(...fullSeries);
-  const padding = Math.max((maximum - minimum) * .18, kind === "motion" ? .005 : 2);
-  const low = minimum - padding;
-  const high = maximum + padding;
-  const inset = 10 * ratio;
-  const plotWidth = Math.max(1, width - inset * 2);
-  const plotHeight = Math.max(1, height - inset * 2);
-  const xStep = plotWidth / Math.max(1, fullSeries.length - 1);
-  context.beginPath();
-  context.lineWidth = 1.6 * ratio;
-  context.lineJoin = "round";
-  context.lineCap = "round";
-  context.strokeStyle = color;
-  values.forEach((value, index) => {
-    const x = inset + index * xStep;
-    const y = inset + (1 - ((value - low) / Math.max(.0001, high - low))) * plotHeight;
-    if (index === 0) context.moveTo(x, y);
-    else context.lineTo(x, y);
-  });
-  context.stroke();
-  const x = inset + (values.length - 1) * xStep;
-  const y = inset + (1 - ((values.at(-1) - low) / Math.max(.0001, high - low))) * plotHeight;
-  context.save();
-  context.globalAlpha = .2;
-  context.strokeStyle = color;
-  context.setLineDash([2 * ratio, 4 * ratio]);
-  context.beginPath();
-  context.moveTo(x, inset);
-  context.lineTo(x, height - inset);
-  context.stroke();
-  context.restore();
-  context.fillStyle = color;
-  context.beginPath();
-  context.arc(x, y, 2.8 * ratio, 0, Math.PI * 2);
-  context.fill();
-}
-
-function formatReading(value, unit) {
-  if (typeof value !== "number") return "—";
-  return unit === "mA" ? value.toFixed(1) : value.toFixed(3);
+function renderSidebar(session) {
+  const references = session.projectContext.expectedBehavior.referenceDeviceIds; const subject = device(session); const controlled = session.observations.filter((item) => item.phase !== "monitoring"); const controlledIds = new Set(controlled.map((item) => item.id)); const valid = session.evidence.observations.filter((item) => item.valid && controlledIds.has(item.observationId)).length;
+  $("#context-title").textContent = session.projectContext.project.name;
+  $("#context-facts").innerHTML = [["Goal", session.projectContext.project.goal], ["Sensors", `${references.length + session.projectContext.expectedBehavior.subjectDeviceIds.length} FSR channels`], ["References", references.map((id) => id.toUpperCase()).join(", ")], ["Subject", subject?.label || session.targetDeviceId], ["Tolerance", `±${(session.projectContext.expectedBehavior.toleranceFraction * 100).toFixed(0)}%`]].map(([label, value]) => `<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+  $("#hardware-title").textContent = session.hardware.boardIdentity; $("#hardware-health").dataset.healthy = String(session.hardware.connected); $("#hardware-facts").innerHTML = [["Source", session.mode], ["Adapter", session.mode === "physical" ? "ESP32 serial" : "Deterministic simulator"], ["Profile", session.hardware.profileId], ["Detected", `${session.hardware.detectedDevices.filter((item) => item.present !== false).length} configured devices`]].map(([label, value]) => `<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+  $("#evidence-count").textContent = `${controlled.length} controlled sample${controlled.length === 1 ? "" : "s"}`; $("#confidence").textContent = session.evidence.confidence; $("#evidence-progress").innerHTML = `<div><span>Valid observations</span><strong>${valid}</strong></div><div><span>Reference coverage</span><strong>${session.evidence.reference ? "Complete" : "Collecting"}</strong></div><div><span>Verification</span><strong>${session.evidence.verificationStatus.replaceAll("_", " ")}</strong></div>`;
+  const timeline = [...session.timeline].reverse().slice(0, 9); $("#timeline").innerHTML = timeline.map((event) => `<div class="timeline-item"><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><div><strong>${escapeHtml(event.type.split(".").at(-1).replaceAll("_", " "))}</strong><p>${escapeHtml(event.summary)}</p></div></div>`).join(""); $("#event-count").textContent = String(session.timeline.length);
 }
 
 function render(session) {
-  state.session = session;
-  $("#setup").classList.add("hidden");
-  $("#workspace").classList.remove("hidden");
-  const physical = session.mode === "physical";
-  $("#mode-badge").textContent = physical ? "Physical" : "Simulation";
-  $("#mode-badge").dataset.tone = physical ? "warning" : "info";
-  $("#connection-badge").textContent = session.hardware.connected ? "Connected" : "Disconnected";
-  $("#connection-badge").dataset.tone = session.hardware.connected ? "success" : "neutral";
-  $("#lifecycle").textContent = session.lifecycle.replaceAll("_", " ");
-  $("#lifecycle-pill").textContent = session.lifecycle.replaceAll("_", " ");
-  $("#lifecycle-pill").dataset.state = session.lifecycle.toLowerCase();
-  $("#problem-summary").textContent = session.problem || "Investigating the reported hardware behavior.";
-  $("#budget").textContent = `${session.totalActivations} / 6`;
-  $("#verification").textContent = `${session.consecutiveVerificationPasses} / 2 consecutive`;
-  const latestDecision = session.decisions.at(-1);
-  $("#agent-source").textContent = latestDecision ? latestDecision.decisionSource.toUpperCase() : "—";
-  $("#agent-proof").textContent = latestDecision?.decisionSource === "openai" ? "Provider response recorded" : latestDecision ? "Fallback; not agentic proof" : "Not yet evaluated";
-  $("#estop").disabled = session.lifecycle === "ESTOPPED" || session.lifecycle === "CONFIRMED";
-
-  const observation = [...session.observations].reverse().find((item) => item.command !== "sample_motion");
-  const observationEvidence = observation && session.evidence.observations.find((item) => item.observationId === observation.id);
-  $("#observation-source").textContent = observation ? `${observation.source} · ${observation.adapter}` : "No source";
-  $("#observation-source").dataset.tone = observation ? (observation.source === "physical" ? "warning" : "info") : "neutral";
-  $("#observation-title").textContent = observation
-    ? observation.command === "motor_motion_probe"
-      ? (observationEvidence?.motionDetected ? "Expected motion signature detected" : "Expected motion signature not detected")
-      : `${labels[observation.command] || observation.command} completed`
-    : "Baseline captured; ready to investigate";
-  $("#measurements").innerHTML = observation?.measurements.map((item) => `
-    <div class="measurement"><span>${escapeHtml(item.name.replaceAll("_", " "))}</span><strong>${escapeHtml(valueText(item.value, item.unit))}</strong></div>
-  `).join("") || `<p class="rationale">No diagnostic motor observation yet.</p>`;
-
-  const pending = session.pendingDecision;
-  const cooldownMs = pending?.cooldownReadyAt ? Math.max(0, new Date(pending.cooldownReadyAt).getTime() - Date.now()) : 0;
-  $("#decision-title").textContent = pending ? labels[pending.action] : latestDecision ? latestDecision.selectedAction.replaceAll("_", " ") : "No experiment pending";
-  $("#decision-rationale").textContent = pending?.rationale || latestDecision?.rationale || "The coordinator is evaluating available evidence.";
-  $("#approval-facts").innerHTML = pending ? [
-    ["Fixed pulse", `${pending.fixedParameters.durationMs} ms`],
-    ["Current trip", `${pending.fixedParameters.currentLimitMa} mA`],
-    ["Cooldown", cooldownMs > 0 ? `Ready in ${(cooldownMs / 1000).toFixed(1)} s` : "Ready"],
-    ["Activations remaining", pending.activationsRemaining],
-    ["Evidence source", session.mode],
-  ].map(([key, value]) => `<span>${escapeHtml(key)}<strong>${escapeHtml(value)}</strong></span>`).join("") : "";
-  $("#approve").disabled = !pending || cooldownMs > 0;
-  $("#approve").setAttribute("aria-busy", "false");
-  $("#approve").textContent = cooldownMs > 0 ? `Cooldown · ${(cooldownMs / 1000).toFixed(1)} s` : "Approve bounded activation";
-  clearTimeout(state.cooldownTimer);
-  if (pending && cooldownMs > 0) {
-    state.cooldownTimer = setTimeout(async () => {
-      try { render(await api(`/api/sessions/${session.id}`)); } catch (error) { toast(error.message); }
-    }, cooldownMs + 50);
-  }
-  $("#declare").disabled = session.lifecycle !== "AWAITING_INTERVENTION";
-
-  $("#confidence").textContent = session.evidence.confidenceLabel;
-  $("#confidence").dataset.tone = session.evidence.confidenceLabel === "CONFIRMED" ? "success" : session.evidence.confidenceLabel === "UNKNOWN" ? "neutral" : "warning";
-  $("#hypotheses").innerHTML = session.evidence.hypotheses.map((item) => `
-    <div class="hypothesis">
-      <div><strong>${escapeHtml(item.hypothesis.replaceAll("_", " "))}</strong><br><small>${escapeHtml(item.reasons[0] || "No valid supporting evidence yet.")}</small></div>
-      <div class="score-wrap"><div class="score-track"><div class="score-bar" style="width:${Math.max(0, Math.min(100, item.support))}%"></div></div><span class="score">${item.support}</span></div>
-    </div>
-  `).join("");
-
-  $("#hardware-facts").innerHTML = [
-    ["Board", session.hardware.boardIdentity],
-    ["Firmware", session.hardware.firmwareVersion],
-    ["Profile", session.hardware.profileId],
-    ["Calibration", session.calibration.id],
-    ["Sensors", session.hardware.detectedI2c.join(", ") || "None"],
-    ["E-stop", session.hardware.estopLatched ? "Latched" : "Ready"],
-  ].map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd title="${escapeHtml(value)}">${escapeHtml(value)}</dd></div>`).join("");
-
-  $("#timeline").innerHTML = [...session.timeline].reverse().map((event) => `
-    <li><strong>${escapeHtml(event.summary)}</strong><time>${new Date(event.at).toLocaleTimeString()} · ${escapeHtml(event.type)}</time></li>
-  `).join("");
-  $("#event-count").textContent = `${session.timeline.length} ${session.timeline.length === 1 ? "event" : "events"}`;
-
-  const terminal = ["CONFIRMED", "FAILED", "INTERRUPTED", "ESTOPPED"].includes(session.lifecycle);
-  $("#report-title").textContent = session.lifecycle === "CONFIRMED" ? "CONFIRMED: motor power path restored" : terminal ? session.lifecycle : "Investigation in progress";
-  $("#download-report").disabled = !terminal;
-  $("#report").innerHTML = `
-    <p><strong>Source:</strong> ${escapeHtml(session.mode)}</p>
-    <p><strong>Calibration:</strong> ${escapeHtml(session.calibration.id)}</p>
-    <p><strong>Evidence state:</strong> ${escapeHtml(session.evidence.evidenceState.replaceAll("_", " "))}</p>
-    ${session.failureReason ? `<p><strong>Outcome:</strong> ${escapeHtml(session.failureReason)}</p>` : ""}
-    <p class="report-limitations"><strong>Limitations:</strong> ${escapeHtml(session.evidence.limitations.join(" "))}</p>`;
-  renderPlots(session);
+  state.session = session; $("#setup").classList.add("hidden"); $("#workspace").classList.remove("hidden");
+  $("#mode-badge").textContent = session.mode; $("#connection-badge").textContent = session.hardware.connected ? "Connected" : "Disconnected"; $("#connection-badge").dataset.tone = session.hardware.connected ? "success" : "danger";
+  $("#project-name").textContent = session.projectContext.project.name; $("#problem-summary").textContent = session.problem || session.projectContext.project.goal; $("#lifecycle-pill").textContent = session.agentState.replaceAll("_", " "); $("#lifecycle-pill").dataset.state = session.agentState.toLowerCase();
+  const latestDecision = session.decisions.at(-1); $("#agent-source").textContent = latestDecision?.decisionSource === "openai" ? "OpenAI-selected experiment" : "Deterministic fallback";
+  const copy = agentCopy(session); $("#agent-state-label").textContent = copy.label; $("#agent-message").textContent = copy.message; $("#agent-detail").textContent = copy.detail; $("#agent-console").dataset.agentState = session.agentState; $("#agent-orb").className = `agent-orb ${ACTIVE_STATES.has(session.agentState) ? "active" : session.agentState === "CONFIRMED" ? "complete" : "idle"}`;
+  $("#evidence-badge").textContent = session.evidence.state.replaceAll("_", " "); $("#evidence-badge").dataset.tone = session.evidence.state === "NORMAL" ? "success" : session.evidence.state === "INSUFFICIENT_EVIDENCE" ? "neutral" : "warning";
+  const active = session.activeExperiment; const target = device(session, active?.deviceId || session.targetDeviceId); const channel = target ? primaryChannel(target.type) : undefined; const observation = latestObservation(session, (item) => item.deviceId === target?.id); const reading = observation?.measurements.find((item) => item.channel === channel && typeof item.value === "number");
+  $("#current-value").textContent = formatNumber(active?.currentValue ?? reading?.value, reading?.unit); $("#baseline-value").textContent = formatNumber(active?.baseline, reading?.unit); $("#delta-value").textContent = active?.delta === undefined ? "—" : `${active.delta >= 0 ? "+" : ""}${formatNumber(active.delta, reading?.unit)}`; $("#elapsed-time").textContent = active ? `${Math.max(0, (Date.now() - new Date(active.startedAt).getTime()) / 1000).toFixed(1)} s` : "0.0 s"; $("#sample-count").textContent = String(active?.sampleCount || 0); $("#signal-quality").textContent = (active?.signalQuality || "WAITING").toLowerCase();
+  $("#start-investigation").classList.toggle("hidden", session.agentState !== "IDLE"); $("#retry-investigation").classList.toggle("hidden", session.agentState !== "INCONCLUSIVE" || !session.pendingDecision); $("#intervention-action").classList.toggle("hidden", session.agentState !== "WAITING_FOR_INTERVENTION"); $("#download-report").classList.toggle("hidden", !["DIAGNOSIS_READY", "CONFIRMED", "INCONCLUSIVE"].includes(session.agentState)); $("#estop").disabled = !ACTIVE_STATES.has(session.agentState);
+  renderGraph(session); renderAnalysis(session); renderSidebar(session);
 }
 
-function escapeHtml(value) {
-  const div = document.createElement("div");
-  div.textContent = String(value);
-  return div.innerHTML;
+async function runAgentLoop() {
+  if (state.loopRunning || !state.session) return; state.loopRunning = true; const token = ++state.loopToken;
+  try {
+    while (state.session && ACTIVE_STATES.has(state.session.agentState) && token === state.loopToken) {
+      const delay = ({ INITIALIZING: 650, WAITING_FOR_USER_STIMULUS: 900, RECORDING: 400, ANALYZING: 850, SELECTING_NEXT_EXPERIMENT: 650, POST_INTERVENTION_VERIFY: 700 })[state.session.agentState] || 700;
+      await wait(delay); if (token !== state.loopToken) break;
+      render(await api(`/api/sessions/${state.session.id}/investigation/advance`, { method: "POST", body: "{}" }));
+    }
+  } catch (error) { toast(error.message); }
+  finally { state.loopRunning = false; }
 }
+function connectEvents(id) { state.events?.close(); state.events = new EventSource(`/api/sessions/${id}/events`); state.events.addEventListener("timeline", async () => { if (state.loopRunning) return; try { render(await api(`/api/sessions/${id}`)); } catch (error) { toast(error.message); } }); }
+function refreshTargets(context) { const targets = context.expectedBehavior?.subjectDeviceIds || []; $("#target-device").innerHTML = targets.map((id) => { const item = context.components.find((component) => component.id === id); return `<option value="${escapeHtml(id)}">${escapeHtml(item?.label || id)} · suspect</option>`; }).join(""); }
 
-function connectEvents(sessionId) {
-  state.events?.close();
-  state.events = new EventSource(`/api/sessions/${sessionId}/events`);
-  state.events.addEventListener("timeline", async () => {
-    try { render(await api(`/api/sessions/${sessionId}`)); } catch (error) { toast(error.message); }
-  });
-}
-
-$("#mode").addEventListener("change", (event) => {
-  $("#fixture").disabled = event.target.value === "physical";
-});
-
-document.querySelectorAll(".section-tab").forEach((tab) => {
-  tab.addEventListener("click", () => switchView(tab.dataset.view));
-  tab.addEventListener("keydown", (event) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    const tabs = [...document.querySelectorAll(".section-tab")];
-    const direction = event.key === "ArrowRight" ? 1 : -1;
-    const next = tabs[(tabs.indexOf(tab) + direction + tabs.length) % tabs.length];
-    next.focus();
-    switchView(next.dataset.view);
-  });
-});
-window.addEventListener("popstate", () => switchView(location.hash.slice(1) || "evidence", false));
-window.addEventListener("resize", () => {
-  cancelAnimationFrame(state.plotResizeFrame);
-  state.plotResizeFrame = requestAnimationFrame(() => {
-    state.plotKeys.clear();
-    if (state.session && state.activeView === "evidence") renderPlots(state.session);
-  });
-});
-
-$("#theme-toggle").addEventListener("click", () => {
-  setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
-});
-
-$("#start-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const submit = event.submitter || event.currentTarget.querySelector("button[type='submit']");
-  setBusy(submit, true, "Starting…");
-  try {
-    let session = await api("/api/sessions", {
-      method: "POST",
-      body: JSON.stringify({ mode: $("#mode").value, fixture: $("#mode").value === "simulation" ? $("#fixture").value : undefined }),
-    });
-    session = await api(`/api/sessions/${session.id}/problem`, {
-      method: "POST",
-      body: JSON.stringify({ problem: $("#problem").value }),
-    });
-    render(session);
-    switchView(location.hash.slice(1) || "evidence", false);
-    connectEvents(session.id);
-  } catch (error) { toast(error.message); }
-  finally { setBusy(submit, false, ""); }
-});
-
-$("#approve").addEventListener("click", () => {
-  const pending = state.session?.pendingDecision;
-  if (!pending) return;
-  $("#dialog-title").textContent = labels[pending.action];
-  $("#dialog-facts").innerHTML = $("#approval-facts").innerHTML;
-  $("#approval-dialog").showModal();
-});
-
-$("#confirm-approval").addEventListener("click", async (event) => {
-  event.preventDefault();
-  const session = state.session;
-  const pending = session?.pendingDecision;
-  if (!session || !pending) return;
-  $("#approval-dialog").close();
-  setBusy($("#approve"), true, "Executing…");
-  try {
-    render(await api(`/api/sessions/${session.id}/decisions/${pending.id}/execute`, {
-      method: "POST",
-      body: JSON.stringify({ expectedVersion: session.version }),
-    }));
-  } catch (error) { toast(error.message); render(session); }
-});
-
-$("#declare").addEventListener("click", async () => {
-  setBusy($("#declare"), true, "Declaring…");
-  try {
-    render(await api(`/api/sessions/${state.session.id}/interventions`, {
-      method: "POST",
-      body: JSON.stringify({ description: $("#intervention").value }),
-    }));
-  } catch (error) { toast(error.message); }
-  finally { if (state.session?.lifecycle === "AWAITING_INTERVENTION") setBusy($("#declare"), false, ""); }
-});
-
-$("#estop").addEventListener("click", async () => {
-  try {
-    render(await api(`/api/sessions/${state.session.id}/emergency-stop`, { method: "POST", body: "{}" }));
-  } catch (error) { toast(error.message); }
-});
-
-$("#download-report").addEventListener("click", async () => {
-  try {
-    const report = await api(`/api/sessions/${state.session.id}/report`);
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `ahea-report-${state.session.id}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  } catch (error) { toast(error.message); }
-});
-
-setTheme(document.documentElement.dataset.theme);
+$("#theme-toggle").addEventListener("click", () => { const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = theme; localStorage.setItem("ahea-theme", theme); if (state.session) renderGraph(state.session); });
+$("#mode").addEventListener("change", (event) => { $("#fixture-field").classList.toggle("hidden", event.target.value === "physical"); });
+$("#project-context").addEventListener("change", () => { try { refreshTargets(JSON.parse($("#project-context").value)); } catch { /* Server validation provides the actionable error. */ } });
+$("#start-form").addEventListener("submit", async (event) => { event.preventDefault(); try { const projectContext = JSON.parse($("#project-context").value); let session = await api("/api/sessions", { method: "POST", body: JSON.stringify({ mode: $("#mode").value, fixture: $("#mode").value === "simulation" ? $("#fixture").value : undefined, targetDeviceId: $("#target-device").value, projectContext }) }); session = await api(`/api/sessions/${session.id}/problem`, { method: "POST", body: JSON.stringify({ problem: $("#problem").value }) }); render(session); connectEvents(session.id); } catch (error) { toast(error.message); } });
+async function startInvestigation() { try { render(await api(`/api/sessions/${state.session.id}/investigation/start`, { method: "POST", body: "{}" })); void runAgentLoop(); } catch (error) { toast(error.message); } }
+$("#start-investigation").addEventListener("click", startInvestigation); $("#retry-investigation").addEventListener("click", startInvestigation);
+$("#declare").addEventListener("click", async () => { const recommendationId = state.session?.evidence.recommendations[0]?.id; if (!state.session || !recommendationId) return; try { render(await api(`/api/sessions/${state.session.id}/interventions`, { method: "POST", body: JSON.stringify({ description: $("#intervention").value, recommendationId }) })); void runAgentLoop(); } catch (error) { toast(error.message); } });
+$("#estop").addEventListener("click", async () => { if (!state.session || !confirm("Stop all active hardware operations and end this investigation?")) return; state.loopToken += 1; try { render(await api(`/api/sessions/${state.session.id}/emergency-stop`, { method: "POST", body: "{}" })); } catch (error) { toast(error.message); } });
+$("#download-report").addEventListener("click", async () => { try { const report = await api(`/api/sessions/${state.session.id}/report`); const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `ahea-report-${state.session.id}.json`; anchor.click(); URL.revokeObjectURL(url); } catch (error) { toast(error.message); } });
+window.addEventListener("resize", () => { if (state.session) renderGraph(state.session); });
+api("/api/project-context/default").then((context) => { $("#project-context").value = JSON.stringify(context, null, 2); refreshTargets(context); }).catch((error) => toast(error.message));

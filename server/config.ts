@@ -1,32 +1,27 @@
-import { readFileSync } from "node:fs";
-import type { CalibrationProfile } from "../shared/domain.js";
-import { calibrationProfileSchema } from "../shared/schemas.js";
+import { createHash } from "node:crypto";
+import type { ProjectContext } from "../shared/domain.js";
+import { projectContextSchema } from "../shared/schemas.js";
 
-export const simulationCalibration: CalibrationProfile = {
-  id: "cal-simulator-v1",
-  projectId: "dc-motor-demo",
-  profileId: "sim-dc-motor-v1",
-  boardIdentity: "SIM-ESP32S3",
-  firmwareVersion: "sim-1.0.0",
-  sensorIdentities: { motion: "SIM-MPU6050@0x68", current: "SIM-INA219@0x40" },
-  capturedAt: "2026-01-01T00:00:00.000Z",
-  sampleCounts: { inactive: 100, healthy: 100 },
-  sensorErrorRates: { inactive: 0, healthy: 0 },
-  idleCurrentMa: 2.5,
-  healthyCurrentMa: 181,
-  baseMotionRmsG: 0.012,
-  healthyMotionRmsG: 0.22,
-  thresholds: {
-    motionMultiplier: 3,
-    healthyMotionFraction: 0.5,
-    motionNoiseFloorG: 0.05,
-    idleCurrentMarginMa: 10,
-    currentNoiseFloorMa: 20,
-    healthyCurrentLowFraction: 0.6,
-    healthyCurrentHighFraction: 1.4,
-    maximumSensorErrorRate: 0.05,
-  },
-};
+const fsr = (id: string, role: "reference" | "subject", binding: string) => ({
+  id, label: id.toUpperCase(), type: "fsr" as const, role, binding,
+  circuit: { topology: "fsr_to_vcc" as const, fixedResistorOhms: 10_000, supplyMillivolts: 3_300, adcMaximumMillivolts: 3_100, adcMaximumRaw: 4_095 },
+  expected: { maximumSampleStddevRaw: 80, maximumInvalidSampleRate: 0.05 },
+});
+
+export const defaultProjectContext: ProjectContext = projectContextSchema.parse({
+  schemaVersion: 1,
+  project: { id: "pressure-floor-demo", name: "Pressure-sensitive floor", goal: "Five FSR sensors should produce equivalent normalized responses under the same manual stimulus." },
+  hardwareProfileId: "esp32-fsr-safe-disabled-v1",
+  components: [
+    fsr("fsr1", "reference", "fsr_1_adc"), fsr("fsr2", "reference", "fsr_2_adc"), fsr("fsr3", "reference", "fsr_3_adc"), fsr("fsr4", "reference", "fsr_4_adc"), fsr("fsr5", "subject", "fsr_5_adc"),
+    { id: "motion1", label: "MPU6050 motion sensor", type: "mpu6050", role: "observer", binding: "mpu6050_i2c", address: "0x68", expected: { maximumAccelerationStddevG: 0.08, maximumInvalidSampleRate: 0.05 } },
+    { id: "climate1", label: "DHT11 climate sensor", type: "dht11", role: "observer", binding: "dht11_data", expected: { temperatureC: [10, 50], humidityPercent: [10, 90], maximumInvalidSampleRate: 0.1 } },
+    { id: "distance1", label: "HC-SR04 distance sensor", type: "hc_sr04", role: "observer", binding: "hc_sr04_timing", echoProtectionReviewed: false, expected: { distanceCm: [2, 400], maximumStddevCm: 2, maximumTimeoutRate: 0.05 } },
+  ],
+  expectedBehavior: { kind: "equivalent_normalized_response", referenceDeviceIds: ["fsr1", "fsr2", "fsr3", "fsr4"], subjectDeviceIds: ["fsr5"], toleranceFraction: 0.1 },
+  procedures: { fsrStimulus: { kind: "repeatable_manual", trialsPerDevice: 1, operatorConfirmationRequired: true } },
+  constraints: { maximumExperiments: 24, physicalSourceRequiredForConfirmation: true, humanApprovalBeforeModification: true, allowedResistorOhms: [10_000, 22_000, 33_000, 47_000, 56_000, 68_000, 100_000], maximumDividerCurrentMilliamps: 1 },
+});
 
 export const appConfig = {
   port: Number(process.env.PORT ?? 3000),
@@ -34,10 +29,8 @@ export const appConfig = {
   model: process.env.OPENAI_MODEL ?? "gpt-5-mini",
   serialPath: process.env.AHEA_SERIAL_PATH,
   physicalEnabled: process.env.AHEA_PHYSICAL_ENABLED === "true",
-  calibrationPath: process.env.AHEA_CALIBRATION_PATH,
 };
 
-export function loadPhysicalCalibration(filePath = appConfig.calibrationPath): CalibrationProfile | undefined {
-  if (!filePath) return undefined;
-  return calibrationProfileSchema.parse(JSON.parse(readFileSync(filePath, "utf8")));
+export function projectContextDigest(context: ProjectContext): string {
+  return createHash("sha256").update(JSON.stringify(context)).digest("hex");
 }

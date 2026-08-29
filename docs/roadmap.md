@@ -1,88 +1,38 @@
-# Phased delivery roadmap
+# Delivery roadmap
 
-Each phase has a required exit gate. Later phases must not be represented as complete until their earlier dependencies and evidence requirements pass.
+## Phase 0 — Sensor-first simulation MVP
 
-## Phase 0 — Repository foundation
+- Versioned project context and built-in device modules
+- Adaptive semantic experiment selection
+- FSR reference/outlier evidence and bounded candidate analysis
+- Human intervention and repeated verification
+- Strict provenance, audit timeline, and safe-disabled firmware
 
-Deliverables:
+Exit gate: `npm run check` passes; balanced, outlier, noisy, and read-failure fixtures diverge; arbitrary hardware/candidate inputs fail closed; simulation cannot claim physical confirmation.
 
-- TypeScript build, deterministic tests, environment template, and contributor documentation
-- Shared domain and protocol types with runtime validation
-- Safe-disabled firmware profile and explicit generated-data exclusions
+## Phase 1 — Physical sensor bench
 
-Exit gate:
+- Reviewed ESP32 profile and exact FSR circuit
+- MPU6050, DHT11, HC-SR04, and FSR serial measurements
+- HC-SR04 echo protection and ADC characterization
+- Hardware-in-loop failure, timeout, reset, and provenance evidence
 
-- `npm run check` passes from a clean install
-- No secret, machine-specific serial path, generated session data, or build artifact is tracked
+Exit gate: firmware build/native tests pass and physical results are recorded without overstating measurement meaning.
 
-## Phase 1 — Simulation MVP
+## Phase 2 — Physical FSR tuning demo
 
-Deliverables:
+- Repeatable stimulus procedure
+- Four reference sensors plus one subject
+- Evidence-backed candidate, human replacement, and two passing physical verification trials
 
-- Session coordinator, immutable mode selection, safety gateway, and local audit store
-- Disconnected, healthy, stalled, and sensor-failure fixtures
-- Deterministic evidence, confidence, lifecycle, and verification rules
-- Version-bound activation approval, six-activation cap, and SSE dashboard
-- Visibly labeled deterministic fallback
+Exit gate: repeated demonstrations succeed and reports preserve stimulus/circuit limitations.
 
-Exit gate:
+## Phase 3 — Optional actuators
 
-- The disconnected fixture reaches `CONFIRMED` only after a declared repair and two consecutive passes
-- Healthy and invalid-motion fixtures produce divergent next decisions
-- Mixed provenance, stale approval, wrong ordering, exhausted budget, and unsafe arguments fail closed
+- Servo only after reviewed power and observable response
+- Relay only after a reviewed driver/flyback circuit and observable external effect
+- Motor only if a motor/driver is actually available; MPU evidence remains an indirect motion signature
 
-## Phase 2 — Live agent acceptance
+## Later
 
-Deliverables:
-
-- Server-side OpenAI Responses API integration using strict semantic function tools
-- Preserved response items and correlated function-call outputs across observations
-- Provider/model/response identity and context digest in every decision record
-- Retry-once and one corrective-call behavior before fallback
-
-Exit gate:
-
-- Opt-in live tests record response IDs for all three divergent motion outcomes
-- A fixed sequence cannot pass the adaptivity test
-- Fallback runs remain excluded from agentic-proof reporting
-
-## Phase 3 — Firmware safety bench
-
-Deliverables:
-
-- Reviewed ESP32-S3 hardware profile
-- Non-blocking shared pulse state machine, sensor sampling, watchdog, deduplication, and local budgets
-- Physical e-stop and protected motor supply
-- Board/profile-bound calibration capture
-
-Exit gate:
-
-- Native firmware tests and ESP32-S3 build pass
-- Outputs remain LOW through boot, reset, malformed input, sensor faults, and timeout
-- E-stop, overcurrent, serial loss, Node termination, and brownout checks pass on the bench
-
-## Phase 4 — Physical end-to-end demo
-
-Deliverables:
-
-- Physical serial adapter enabled only for the reviewed profile
-- Real MPU6050/INA219 provenance in observations and report
-- Healthy calibration, disconnected-lead diagnosis, declared repair, and two-pass verification
-
-Exit gate:
-
-- Five consecutive rehearsals succeed
-- Machine-controlled diagnosis time is under 90 seconds
-- Wall-clock approval and repair time is reported separately
-- The final report preserves driver-failure and indirect-motion limitations
-
-## Phase 5 — Post-MVP hardening
-
-Candidate work after the hackathon gate:
-
-- Crash-safe agent continuation and explicit session-resume/reconnect flows
-- Calibration history and compatibility migrations
-- Structured observability and longer-duration reliability testing
-- Additional hardware profiles only after each receives its own safety review
-
-Authentication, cloud infrastructure, arbitrary hardware control, multiple MCU abstractions, repository analysis, and on-device AI remain out of scope unless the product requirements are deliberately revised.
+- Automated resistor network, optional external instruments, durable migrations, observability, and module distribution ecosystem.

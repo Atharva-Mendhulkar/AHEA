@@ -1,12 +1,12 @@
 {
   "enabled": false,
-  "profileId": "SAFE_DISABLED",
+  "profileId": "esp32-fsr-safe-disabled-v1",
   "boardIdentity": "UNREVIEWED",
   "serialPath": null,
   "requirements": [
-    "Reviewed ESP32-S3 pin and electrical profile",
-    "Physical normally-closed emergency-stop input",
-    "Current-limited supply or correctly rated fuse",
-    "MPU6050 at 0x68 and INA219 at 0x40"
+    "Confirmed ESP32 or ESP32-S3 board identity and fixed pin bindings",
+    "Confirmed FSR divider topology, resistor units, supply, and ADC range",
+    "Reviewed HC-SR04 echo protection before connecting a 5 V echo signal",
+    "Independent driver and power review before enabling any servo or relay"
   ]
 }

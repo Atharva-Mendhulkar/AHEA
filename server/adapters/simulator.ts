@@ -1,14 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type {
-  HardwareCommand,
-  HardwareStatus,
-  Measurement,
-  Observation,
-  SensorHealth,
-} from "../../shared/domain.js";
+import type { ExperimentDefinition, HardwareStatus, Observation, ProjectContext, SimulationFixture } from "../../shared/domain.js";
+import { deviceById } from "../../shared/domain.js";
 import type { ExecuteContext, HardwareAdapter } from "./adapter.js";
-
-export type SimulatorFixture = "disconnected" | "healthy" | "stalled" | "sensor_failure";
 
 export class SimulatorAdapter implements HardwareAdapter {
   readonly source = "simulation" as const;
@@ -16,116 +9,79 @@ export class SimulatorAdapter implements HardwareAdapter {
   private interventionDeclared = false;
   private estopLatched = false;
   private readonly startedAt = Date.now();
+  private readonly calls = new Map<string, number>();
 
-  constructor(readonly fixture: SimulatorFixture = "disconnected") {}
+  constructor(readonly fixture: SimulationFixture, private readonly projectContext: ProjectContext) {}
 
   async preflight(): Promise<HardwareStatus> {
     return {
-      connected: true,
-      firmwareVersion: "sim-1.0.0",
-      boardIdentity: "SIM-ESP32S3",
-      protocolVersion: "1.0",
-      profileId: "sim-dc-motor-v1",
-      physicalEnabled: false,
-      estopLatched: this.estopLatched,
-      supportedCommands: [
-        "scan_i2c", "sample_motion", "motor_motion_probe", "motor_current_probe", "verify_motor", "emergency_stop",
-      ],
-      detectedI2c: ["0x40", "0x68"],
+      connected: true, firmwareVersion: "sim-2.0.0", boardIdentity: "SIM-ESP32S3", protocolVersion: "2.0", profileId: this.projectContext.hardwareProfileId, physicalEnabled: false, estopLatched: this.estopLatched,
+      supportedCommands: ["scan_i2c", "identify_mpu6050", "sample_mpu6050", "sample_dht11", "measure_distance", "sample_fsr", "abort"],
+      detectedDevices: this.projectContext.components.map((device) => ({ deviceId: device.id, type: device.type, present: true, identity: `SIM-${device.type.toUpperCase()}` })),
+      limitations: ["All measurements in this session are simulated."],
     };
   }
-
-  declareIntervention(): void {
-    this.interventionDeclared = true;
-  }
-
+  declareIntervention(): void { this.interventionDeclared = true; }
   async armSession(): Promise<void> {}
-
   async close(): Promise<void> {}
 
-  async execute(command: HardwareCommand, context: ExecuteContext): Promise<Observation> {
+  async execute(experiment: ExperimentDefinition, context: ExecuteContext): Promise<Observation> {
+    if (!experiment.command) throw new Error(`Experiment ${experiment.type} has no hardware command.`);
+    const device = experiment.targetDeviceId ? deviceById(this.projectContext, experiment.targetDeviceId) : undefined;
     const started = Date.now();
-    if (command === "emergency_stop") this.estopLatched = true;
-    const activation = command.startsWith("motor_") || command === "verify_motor";
-    const repaired = this.interventionDeclared && this.fixture === "disconnected";
-    const effectiveFixture: SimulatorFixture = repaired ? "healthy" : this.fixture;
-    const sensorFailed = effectiveFixture === "sensor_failure";
-    const motionDetected = effectiveFixture === "healthy";
-    const currentMean = effectiveFixture === "healthy" ? 181 : effectiveFixture === "stalled" ? 430 : 2.4;
-    const measurements: Measurement[] = [];
-    const series: Observation["series"] = [];
-    const health: SensorHealth[] = [];
+    const measurements: Observation["measurements"] = [];
+    const series: NonNullable<Observation["series"]> = [];
+    const sensorHealth: Observation["sensorHealth"] = [];
+    let accepted = true;
+    let timedOut = false;
 
-    if (command === "scan_i2c") {
-      measurements.push({ name: "detected_addresses", value: "0x40,0x68", unit: "address", sensor: "firmware", quality: "valid" });
-      health.push({ sensor: "firmware", healthy: true, errorRate: 0 });
-    }
-    if (command === "sample_motion" || command === "motor_motion_probe" || command === "verify_motor") {
-      const rms = motionDetected ? 0.225 : 0.015;
+    if (experiment.command === "abort") this.estopLatched = true;
+    if (experiment.command === "sample_fsr" && device?.type === "fsr") {
+      const count = (this.calls.get(device.id) ?? 0) + 1;
+      this.calls.set(device.id, count);
+      const isSubject = device.id === this.projectContext.expectedBehavior.subjectDeviceIds[0];
+      const failed = this.fixture === "fsr_read_failure" && isSubject;
+      const noisy = this.fixture === "fsr_noisy" && isSubject;
+      const repaired = isSubject && this.interventionDeclared;
+      const referenceIndex = this.projectContext.expectedBehavior.referenceDeviceIds.indexOf(device.id);
+      const isBaselineProbe = experiment.phase === "monitoring" && experiment.id.startsWith("baseline:");
+      const center = isBaselineProbe ? 120 : repaired || this.fixture === "fsr_balanced" || !isSubject ? 1800 + Math.max(referenceIndex, 0) * 8 : 1000;
+      const amplitude = noisy ? 180 : 18;
+      const values = makeTrace(64, center + (count % 3 - 1) * 5, amplitude);
+      const sampleMean = mean(values);
+      const sampleStddev = stddev(values);
       measurements.push(
-        { name: "acceleration_rms_g", value: rms, unit: "g", sensor: "mpu6050", quality: sensorFailed ? "invalid" : "valid" },
-        { name: "baseline_rms_g", value: 0.012, unit: "g", sensor: "mpu6050", quality: sensorFailed ? "invalid" : "valid" },
-        { name: "delta_from_baseline_g", value: rms - 0.012, unit: "g", sensor: "mpu6050", quality: sensorFailed ? "invalid" : "valid" },
-        { name: "expected_motion_signature_detected", value: motionDetected, unit: "boolean", sensor: "mpu6050", quality: sensorFailed ? "invalid" : "valid" },
+        { channel: "adc_mean", value: Number(sampleMean.toFixed(2)), unit: "adc_raw", deviceId: device.id, quality: failed ? "invalid" : "valid" },
+        { channel: "adc_stddev", value: Number(sampleStddev.toFixed(2)), unit: "adc_raw", deviceId: device.id, quality: failed ? "invalid" : "valid" },
+        { channel: "normalized_response", value: Number((sampleMean / device.circuit.adcMaximumRaw).toFixed(6)), unit: "ratio", deviceId: device.id, quality: failed ? "invalid" : "valid" },
       );
-      health.push({ sensor: "mpu6050", healthy: !sensorFailed, errorRate: sensorFailed ? 0.25 : 0, detail: sensorFailed ? "Simulated I2C read errors" : undefined });
-      series.push({
-        name: "motion_rms_g",
-        unit: "g",
-        sensor: "mpu6050",
-        sampleIntervalMs: 8,
-        values: makeTrace(72, motionDetected ? 0.18 : 0.012, motionDetected ? 0.095 : 0.005, sensorFailed ? 0.02 : 0.003),
-      });
-    }
-    if (command === "motor_current_probe" || command === "verify_motor") {
-      measurements.push(
-        { name: "current_mean_ma", value: currentMean, unit: "mA", sensor: "ina219", quality: sensorFailed ? "invalid" : "valid" },
-        { name: "current_peak_ma", value: currentMean * 1.08, unit: "mA", sensor: "ina219", quality: sensorFailed ? "invalid" : "valid" },
-        { name: "idle_delta_ma", value: currentMean - 2.5, unit: "mA", sensor: "ina219", quality: sensorFailed ? "invalid" : "valid" },
-      );
-      health.push({ sensor: "ina219", healthy: !sensorFailed, errorRate: sensorFailed ? 0.25 : 0 });
-      series.push({
-        name: "current_ma",
-        unit: "mA",
-        sensor: "ina219",
-        sampleIntervalMs: 8,
-        values: makeTrace(72, currentMean, effectiveFixture === "healthy" ? 18 : effectiveFixture === "stalled" ? 35 : 0.8, sensorFailed ? 12 : 0.6),
-      });
-    }
-    if (command === "emergency_stop") {
-      measurements.push({ name: "estop_latched", value: true, unit: "boolean", sensor: "firmware", quality: "valid" });
-      health.push({ sensor: "firmware", healthy: true, errorRate: 0 });
+      series.push({ channel: "adc_raw", unit: "adc_raw", deviceId: device.id, sampleIntervalMs: 10, values });
+      sensorHealth.push({ deviceId: device.id, healthy: !failed, errorRate: failed ? 1 : 0, detail: failed ? "Simulated ADC read failure." : undefined });
+      accepted = !failed;
+    } else if (experiment.command === "sample_mpu6050" && device?.type === "mpu6050") {
+      const count = (this.calls.get(device.id) ?? 0) + 1; this.calls.set(device.id, count);
+      const motion = 0.08 + Math.abs(Math.sin(count * 0.7)) * 0.55; const values = makeTrace(48, motion, 0.06);
+      measurements.push({ channel: "acceleration_magnitude_g", value: Number(mean(values).toFixed(4)), unit: "g", deviceId: device.id, quality: "valid" }, { channel: "gyro_magnitude_dps", value: Number((motion * 82).toFixed(2)), unit: "deg/s", deviceId: device.id, quality: "valid" });
+      series.push({ channel: "acceleration_magnitude_g", unit: "g", deviceId: device.id, sampleIntervalMs: 20, values }); sensorHealth.push({ deviceId: device.id, healthy: true, errorRate: 0 });
+    } else if (experiment.command === "sample_dht11" && device?.type === "dht11") {
+      const count = (this.calls.get(device.id) ?? 0) + 1; this.calls.set(device.id, count); const temperature = 27 + Math.sin(count * 0.35) * 1.4; const humidity = 54 + Math.sin(count * 0.22) * 3;
+      measurements.push({ channel: "temperature_c", value: Number(temperature.toFixed(2)), unit: "C", deviceId: device.id, quality: "valid" }, { channel: "humidity_percent", value: Number(humidity.toFixed(2)), unit: "%", deviceId: device.id, quality: "valid" }); sensorHealth.push({ deviceId: device.id, healthy: true, errorRate: 0 });
+    } else if (experiment.command === "measure_distance" && device?.type === "hc_sr04") {
+      const count = (this.calls.get(device.id) ?? 0) + 1; this.calls.set(device.id, count); const center = 55 - Math.abs(Math.sin(count * 0.45)) * 32; const values = makeTrace(20, center, 0.7);
+      measurements.push({ channel: "distance_cm", value: Number(mean(values).toFixed(2)), unit: "cm", deviceId: device.id, quality: "valid" }, { channel: "distance_stddev_cm", value: Number(stddev(values).toFixed(2)), unit: "cm", deviceId: device.id, quality: "valid" }); series.push({ channel: "distance_cm", unit: "cm", deviceId: device.id, sampleIntervalMs: 60, values }); sensorHealth.push({ deviceId: device.id, healthy: true, errorRate: 0 });
+    } else if (device) {
+      measurements.push({ channel: "operation_supported", value: true, unit: "boolean", deviceId: device.id, quality: "valid" }); sensorHealth.push({ deviceId: device.id, healthy: true, errorRate: 0 });
+    } else {
+      sensorHealth.push({ deviceId: "firmware", healthy: true, errorRate: 0 });
     }
 
     return {
-      id: randomUUID(),
-      sessionId: context.sessionId,
-      experimentId: context.experimentId,
-      source: "simulation",
-      adapter: "simulator",
-      command,
-      capturedAt: new Date().toISOString(),
-      deviceUptimeMs: Date.now() - this.startedAt,
-      elapsedMs: Math.max(Date.now() - started, activation ? 153 : 5),
-      measurements,
-      series,
-      sensorHealth: health,
-      safety: {
-        activationAccepted: activation && !this.estopLatched,
-        tripped: false,
-        estopLatched: this.estopLatched,
-        timeout: false,
-        reasons: this.estopLatched ? ["Emergency stop is latched."] : [],
-      },
-      calibrationId: context.calibration.id,
+      id: randomUUID(), sessionId: context.sessionId, experimentId: experiment.id, deviceId: device?.id, deviceType: device?.type, source: "simulation", adapter: "simulator", command: experiment.command, phase: context.phase, capturedAt: new Date().toISOString(), deviceUptimeMs: Date.now() - this.startedAt, elapsedMs: Math.max(Date.now() - started, 25), measurements, series, sensorHealth,
+      operation: { accepted, aborted: experiment.command === "abort", timedOut, estopLatched: this.estopLatched, reasons: accepted ? [] : ["SIMULATED_READ_FAILURE"] }, projectContextDigest: context.projectContextDigest,
     };
   }
 }
 
-function makeTrace(length: number, center: number, amplitude: number, noise: number): number[] {
-  return Array.from({ length }, (_, index) => {
-    const harmonic = Math.sin(index * 0.58) * amplitude + Math.sin(index * 1.73) * amplitude * 0.28;
-    const deterministicNoise = Math.sin(index * 4.17) * noise;
-    return Math.max(0, Number((center + harmonic + deterministicNoise).toFixed(4)));
-  });
-}
+function makeTrace(length: number, center: number, amplitude: number): number[] { return Array.from({ length }, (_, index) => Number((center + Math.sin(index * 0.71) * amplitude + Math.sin(index * 1.91) * amplitude * 0.3).toFixed(2))) }
+function mean(values: number[]): number { return values.reduce((sum, value) => sum + value, 0) / values.length }
+function stddev(values: number[]): number { const average = mean(values); return Math.sqrt(values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length) }

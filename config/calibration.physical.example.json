@@ -1,28 +1,19 @@
 {
-  "id": "replace-with-calibration-id",
-  "projectId": "dc-motor-demo",
-  "profileId": "replace-with-reviewed-profile-id",
+  "schemaVersion": 1,
+  "id": "replace-with-sensor-calibration-id",
+  "projectId": "pressure-floor-demo",
+  "hardwareProfileId": "replace-with-reviewed-profile-id",
   "boardIdentity": "replace-with-board-identity",
-  "firmwareVersion": "0.1.0",
-  "sensorIdentities": {
-    "motion": "MPU6050@0x68",
-    "current": "INA219@0x40"
+  "firmwareVersion": "2.0.0",
+  "capturedAt": "2026-08-29T00:00:00.000Z",
+  "adc": {
+    "maximumRaw": 4095,
+    "maximumMillivolts": 3100,
+    "attenuation": "replace-with-reviewed-setting"
   },
-  "capturedAt": "2026-01-01T00:00:00.000Z",
-  "sampleCounts": { "inactive": 100, "healthy": 100 },
-  "sensorErrorRates": { "inactive": 0, "healthy": 0 },
-  "idleCurrentMa": 0,
-  "healthyCurrentMa": 1,
-  "baseMotionRmsG": 0,
-  "healthyMotionRmsG": 0.001,
-  "thresholds": {
-    "motionMultiplier": 3,
-    "healthyMotionFraction": 0.5,
-    "motionNoiseFloorG": 0.05,
-    "idleCurrentMarginMa": 10,
-    "currentNoiseFloorMa": 20,
-    "healthyCurrentLowFraction": 0.6,
-    "healthyCurrentHighFraction": 1.4,
-    "maximumSensorErrorRate": 0.05
+  "fsrStimulus": {
+    "kind": "repeatable_manual",
+    "trialsPerDevice": 3,
+    "limitation": "This procedure is not a calibrated force source."
   }
 }

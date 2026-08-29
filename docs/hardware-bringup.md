@@ -1,29 +1,18 @@
-# Physical hardware bring-up
+# Physical sensor bring-up
 
-Physical mode is not enabled by the committed configuration.
+Physical mode is not enabled by the committed profile.
 
-## Required equipment
+Before changing `PHYSICAL_ENABLED`:
 
-- ESP32-S3, MPU6050, INA219, L298N, and a 3–6 V hobby motor
-- Separate current-limited motor supply or correctly rated fuse
-- Physical normally-closed emergency-stop button
-- Reviewed common-ground, current-sense, driver, and motor wiring
-- USB serial connection to the laptop
+1. Identify the exact ESP32/ESP32-S3 board and ADC limitations.
+2. Assign every logical binding in `hardware_profile.h` to a reviewed pin.
+3. Record the actual FSR divider topology, resistor units/value, supply, ADC attenuation, and safe ADC maximum.
+4. Confirm DHT11 voltage and pull-up wiring.
+5. Add and verify an HC-SR04 echo divider or level shifter before connecting its 5 V echo output.
+6. Keep servo and relay actuation disabled; neither has an approved power/driver profile.
+7. Build and flash firmware, then confirm `hello` identities match project context.
+8. Exercise each sensor command individually and retain raw serial evidence.
+9. Test malformed input, unknown device/plan IDs, duplicate IDs, timeout, USB disconnect, and abort behavior.
+10. Run the full FSR reference/outlier/intervention/verification procedure and report manual-stimulus limitations.
 
-Never power the motor from an ESP32 GPIO or from an unprotected USB rail.
-
-## Enablement checklist
-
-1. Review and replace every value in `firmware/include/hardware_profile.h`.
-2. Change `PHYSICAL_ENABLED` only after the motor pins, direction, PWM duty, pulse duration, e-stop pin, timeout, and current limit are reviewed.
-3. Build and flash the firmware, then verify outputs remain LOW during boot and reset.
-4. Confirm `hello` reports the expected board, firmware, protocol, and profile identities.
-5. Verify MPU6050 at `0x68` and INA219 at `0x40`.
-6. Run inactive calibration, then an explicitly approved healthy pulse calibration.
-7. Store a calibration profile matching the exact board, firmware, profile, and sensor identities.
-8. Save the validated profile using `config/calibration.physical.example.json` as the schema reference.
-9. Configure `AHEA_SERIAL_PATH` and `AHEA_CALIBRATION_PATH`, then set `AHEA_PHYSICAL_ENABLED=true` only after all checks pass.
-
-## Hardware-in-loop release gate
-
-Test physical e-stop during a pulse, Node termination, serial unplug, current trip, sensor disconnect, brownout/reset, provenance, healthy calibration, the complete fault/repair sequence, and five consecutive rehearsals. Record machine-active and wall-clock durations separately.
+Do not copy the simulation example's 10 kΩ divider into physical context unless inspection confirms it. Physical testing has not been completed in this repository.

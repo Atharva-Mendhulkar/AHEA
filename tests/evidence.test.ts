@@ -1,54 +1,34 @@
-import { describe, expect, it } from "vitest";
-import { deriveEvidence } from "../server/evidence.js";
-import { simulationCalibration } from "../server/config.js";
-import { SimulatorAdapter } from "../server/adapters/simulator.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { rm } from "node:fs/promises";
+import { setup, runDiagnostic } from "./helpers.js";
+import { defaultProjectContext } from "../server/config.js";
+import { rankResistorCandidates } from "../server/tuning.js";
 
-describe("deterministic evidence engine", () => {
-  it("supports an open or unenergized path without claiming the exact break", async () => {
-    const adapter = new SimulatorAdapter("disconnected");
-    const context = { sessionId: "session", calibration: simulationCalibration };
-    const motion = await adapter.execute("motor_motion_probe", { ...context, experimentId: "motion" });
-    const current = await adapter.execute("motor_current_probe", { ...context, experimentId: "current" });
-    const evidence = deriveEvidence([motion, current], simulationCalibration, false);
-
-    expect(evidence.evidenceState).toBe("OPEN_PATH_SUPPORTED");
-    expect(evidence.confidenceLabel).toBe("HIGH CONFIDENCE");
-    expect(evidence.limitations.join(" ")).toMatch(/driver-output failure/);
-    expect(evidence.hypotheses.find((item) => item.hypothesis === "mechanical_stall")!.support).toBeLessThan(40);
+const roots: string[] = [];
+afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
+describe("deterministic FSR evidence", () => {
+  it("calculates known-good statistics, an outlier, and a bounded candidate", async () => {
+    const value = await setup(); roots.push(value.root); const session = await runDiagnostic(value.coordinator, value.session);
+    expect(session.evidence.reference?.deviceIds).toEqual(["fsr1", "fsr2", "fsr3", "fsr4"]);
+    expect(session.evidence.state).toBe("CIRCUIT_MISMATCH");
+    expect(session.evidence.subject!.referenceDeviationFraction).toBeGreaterThan(0.1);
+    expect(session.evidence.recommendations[0]?.parameters.resistorOhms).toBe(22000);
+    expect([10000, 22000, 33000, 47000, 56000, 68000, 100000]).toContain(session.evidence.recommendations[0]?.parameters.resistorOhms);
   });
-
-  it("requires two consecutive post-intervention verification passes", async () => {
-    const adapter = new SimulatorAdapter("disconnected");
-    adapter.declareIntervention();
-    const context = { sessionId: "session", calibration: simulationCalibration };
-    const first = await adapter.execute("verify_motor", { ...context, experimentId: "verify-1" });
-    const onePass = deriveEvidence([first], simulationCalibration, true);
-    expect(onePass.consecutiveVerificationPasses).toBe(1);
-    expect(onePass.confidenceLabel).not.toBe("CONFIRMED");
-    const second = await adapter.execute("verify_motor", { ...context, experimentId: "verify-2" });
-    const confirmed = deriveEvidence([first, second], simulationCalibration, true);
-    expect(confirmed.consecutiveVerificationPasses).toBe(2);
-    expect(confirmed.confidenceLabel).toBe("CONFIRMED");
+  it("does not confuse unstable evidence with a resistor mismatch", async () => {
+    const value = await setup("fsr_noisy"); roots.push(value.root); const session = await runDiagnostic(value.coordinator, value.session);
+    expect(session.evidence.state).toBe("EXCESS_NOISE"); expect(session.evidence.recommendations).toEqual([]); expect(session.decisions.at(-1)?.selectedAction).toBe("request_manual_check");
   });
-
-  it("resets the consecutive pass count after an invalid result", async () => {
-    const healthy = new SimulatorAdapter("healthy");
-    const broken = new SimulatorAdapter("sensor_failure");
-    const context = { sessionId: "session", calibration: simulationCalibration };
-    const pass1 = await healthy.execute("verify_motor", { ...context, experimentId: "v1" });
-    const invalid = await broken.execute("verify_motor", { ...context, experimentId: "v2" });
-    const pass2 = await healthy.execute("verify_motor", { ...context, experimentId: "v3" });
-    expect(deriveEvidence([pass1, invalid, pass2], simulationCalibration, true).consecutiveVerificationPasses).toBe(1);
+  it("keeps read failures out of reference conclusions", async () => {
+    const value = await setup("fsr_read_failure"); roots.push(value.root); const session = await runDiagnostic(value.coordinator, value.session);
+    expect(session.evidence.state).toBe("COMMUNICATION_FAILURE"); expect(session.evidence.recommendations).toEqual([]);
   });
-
-  it("derives motion from calibrated raw RMS instead of trusting an adapter boolean", async () => {
-    const adapter = new SimulatorAdapter("healthy");
-    const observation = await adapter.execute("motor_motion_probe", {
-      sessionId: "session", experimentId: "motion", calibration: simulationCalibration,
-    });
-    const reported = observation.measurements.find((item) => item.name === "expected_motion_signature_detected")!;
-    reported.value = false;
-    const evidence = deriveEvidence([observation], simulationCalibration, false);
-    expect(evidence.observations[0]?.motionDetected).toBe(true);
+  it("blocks candidate analysis when the physical divider is unknown or unsafe", () => {
+    const context = structuredClone(defaultProjectContext); const device = context.components.find((item) => item.id === "fsr5")!;
+    if (device.type !== "fsr") throw new Error("fixture mismatch");
+    const reference = { deviceIds: ["fsr1"], collectedTrials: 3, requiredTrials: 3, meanRaw: 1800, stddevRaw: 10, rangeRaw: [1790, 1810] as [number, number] };
+    const subject = { deviceId: "fsr5", collectedTrials: 3, requiredTrials: 3, meanRaw: 1400, stddevRaw: 10, normalizedResponse: 1400 / 4095, referenceDeviationFraction: 400 / 1800 };
+    device.circuit.topology = "unknown"; expect(rankResistorCandidates(context, device, reference, subject)).toEqual([]);
+    device.circuit.topology = "fsr_to_vcc"; context.constraints.maximumDividerCurrentMilliamps = 0.000001; expect(rankResistorCandidates(context, device, reference, subject)).toEqual([]);
   });
 });

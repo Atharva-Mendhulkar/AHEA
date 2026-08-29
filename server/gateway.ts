@@ -1,42 +1,17 @@
-import type { AgentAction, DiagnosisSession } from "../shared/domain.js";
-import { DEFAULT_LIMITS, isMotorCommand, measurement } from "../shared/domain.js";
+import type { DiagnosisSession, ExperimentDefinition } from "../shared/domain.js";
+import { deviceById } from "../shared/domain.js";
+import { buildEligibleExperiments } from "./modules.js";
 
-export interface ValidationResult {
-  accepted: boolean;
-  reasons: string[];
-}
-
-export function validateAction(session: DiagnosisSession, action: AgentAction, now = Date.now()): ValidationResult {
+export interface ValidationResult { accepted: boolean; reasons: string[] }
+export function validateExperiment(session: DiagnosisSession, experiment: ExperimentDefinition, setupConfirmed = true): ValidationResult {
   const reasons: string[] = [];
-  if (["CONFIRMED", "FAILED", "INTERRUPTED", "ESTOPPED"].includes(session.lifecycle)) {
-    reasons.push(`Session is terminal: ${session.lifecycle}.`);
-  }
+  if (["CONFIRMED", "CONCLUDED", "FAILED", "INTERRUPTED", "ESTOPPED"].includes(session.lifecycle)) reasons.push(`Session is terminal: ${session.lifecycle}.`);
   if (session.hardware.estopLatched || session.lifecycle === "ESTOPPED") reasons.push("Emergency stop is latched.");
-  if (session.pendingDecision) reasons.push("Another decision is already pending.");
-
-  if (action === "motor_current_probe") {
-    const motion = [...session.observations].reverse().find((observation) => observation.command === "motor_motion_probe");
-    const classified = motion && session.evidence.observations.find((item) => item.observationId === motion.id);
-    if (!motion || !classified?.valid || measurement<boolean>(motion, "expected_motion_signature_detected") !== false) {
-      reasons.push("Current probe requires a valid absent-motion observation in this session.");
-    }
-  }
-  if (action === "verify_motor" && !session.intervention) reasons.push("Verification requires a declared intervention.");
-  if (action === "motor_motion_probe" && session.diagnosticActivations >= DEFAULT_LIMITS.diagnosticActivations) {
-    reasons.push("Diagnostic activation budget is exhausted.");
-  }
-  if (action === "motor_current_probe" && session.diagnosticActivations >= DEFAULT_LIMITS.diagnosticActivations) {
-    reasons.push("Diagnostic activation budget is exhausted.");
-  }
-  if (action === "verify_motor" && session.verificationActivations >= DEFAULT_LIMITS.verificationActivations) {
-    reasons.push("Verification activation budget is exhausted.");
-  }
-  if (isMotorCommand(action) && session.totalActivations >= DEFAULT_LIMITS.totalActivations) {
-    reasons.push("Total activation budget is exhausted.");
-  }
-  if (isMotorCommand(action) && session.lastActivationAt) {
-    const readyAt = new Date(session.lastActivationAt).getTime() + DEFAULT_LIMITS.cooldownMs;
-    if (now < readyAt) reasons.push(`Cooldown active until ${new Date(readyAt).toISOString()}.`);
-  }
+  if (session.experimentsExecuted >= session.projectContext.constraints.maximumExperiments) reasons.push("Experiment budget is exhausted.");
+  if (experiment.targetDeviceId && !deviceById(session.projectContext, experiment.targetDeviceId)) reasons.push("Target device is not in project context.");
+  if (!buildEligibleExperiments({ ...session, pendingDecision: undefined }).some((candidate) => candidate.id === experiment.id && candidate.type === experiment.type && candidate.planId === experiment.planId && candidate.command === experiment.command && candidate.targetDeviceId === experiment.targetDeviceId && candidate.recommendationId === experiment.recommendationId)) reasons.push("Experiment is not eligible for the current evidence state.");
+  if (experiment.requiresSetupConfirmation && !setupConfirmed) reasons.push("Operator must confirm the declared physical setup or stimulus.");
+  if (experiment.type === "verify_sensor" && !session.intervention) reasons.push("Verification requires a declared intervention.");
+  if (experiment.budgetClass === "actuation") reasons.push("Actuation is disabled in the sensor-first MVP.");
   return { accepted: reasons.length === 0, reasons };
 }

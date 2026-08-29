@@ -18,8 +18,8 @@ Start with the [phased roadmap](docs/roadmap.md). Choose work from the earliest 
 - The coordinator owns state transitions, approval freshness, budgets, and the audit trail.
 - The evidence engine remains deterministic and side-effect free.
 - Adapters preserve provenance and never combine physical and simulated evidence.
-- Firmware independently fails safe and bounds motor-on time.
-- Physical mode remains disabled unless a reviewed profile and matching calibration are present.
+- Firmware independently fails safe and bounds every physical operation.
+- Physical mode remains disabled unless a reviewed binding/electrical profile is present.
 - User-visible rationales must be concise explanations, not private chain-of-thought.
 
 ## Change guidance
@@ -34,7 +34,7 @@ Start with the [phased roadmap](docs/roadmap.md). Choose work from the earliest 
 ## Testing expectations
 
 - Every safety regression needs a failing test before or with the fix.
-- Simulator changes must cover disconnected, healthy, stalled, and sensor-failure branches.
+- Simulator changes must cover balanced, outlier, noisy, and sensor/read-failure branches.
 - OpenAI-dependent tests stay opt-in and must record response IDs; deterministic tests must not require a network connection.
 - Physical claims require documented hardware-in-loop results and must not be inferred from simulator results.
 

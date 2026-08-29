@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile, appendFile } from "node:fs/promises";
 import path from "node:path";
 import type { DiagnosisSession, TimelineEvent } from "../shared/domain.js";
+import { storedSessionHeaderSchema } from "../shared/schemas.js";
 
 export class JsonStore {
   constructor(private readonly root: string) {}
@@ -26,7 +27,10 @@ export class JsonStore {
 
   async loadSession(id: string): Promise<DiagnosisSession | undefined> {
     try {
-      return JSON.parse(await readFile(this.sessionPath(id), "utf8")) as DiagnosisSession;
+      const parsed: unknown = JSON.parse(await readFile(this.sessionPath(id), "utf8"));
+      if (!parsed || typeof parsed !== "object" || !("schemaVersion" in parsed)) throw new Error("Legacy session schema is unsupported; preserve the file for audit and create a new session.");
+      storedSessionHeaderSchema.parse(parsed);
+      return parsed as DiagnosisSession;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
       throw error;

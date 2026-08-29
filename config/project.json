@@ -1,12 +1,22 @@
 {
-  "projectId": "dc-motor-demo",
-  "name": "ESP32-S3 DC motor diagnostic demo",
-  "protocolVersion": "1.0",
-  "pulseDurationMs": 350,
-  "cooldownMs": 2000,
-  "currentLimitMa": 750,
-  "diagnosticActivationLimit": 2,
-  "verificationActivationLimit": 4,
-  "totalActivationLimit": 6,
-  "maximumSensorErrorRate": 0.05
+  "schemaVersion": 1,
+  "project": {
+    "id": "pressure-floor-demo",
+    "name": "Pressure-sensitive floor",
+    "goal": "Five FSR sensors should produce equivalent normalized responses under the same manual stimulus."
+  },
+  "hardwareProfileId": "esp32-fsr-safe-disabled-v1",
+  "components": [
+    { "id": "fsr1", "label": "FSR1", "type": "fsr", "role": "reference", "binding": "fsr_1_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
+    { "id": "fsr2", "label": "FSR2", "type": "fsr", "role": "reference", "binding": "fsr_2_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
+    { "id": "fsr3", "label": "FSR3", "type": "fsr", "role": "reference", "binding": "fsr_3_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
+    { "id": "fsr4", "label": "FSR4", "type": "fsr", "role": "reference", "binding": "fsr_4_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
+    { "id": "fsr5", "label": "FSR5", "type": "fsr", "role": "subject", "binding": "fsr_5_adc", "circuit": { "topology": "fsr_to_vcc", "fixedResistorOhms": 10000, "supplyMillivolts": 3300, "adcMaximumMillivolts": 3100, "adcMaximumRaw": 4095 }, "expected": { "maximumSampleStddevRaw": 80, "maximumInvalidSampleRate": 0.05 } },
+    { "id": "motion1", "label": "MPU6050 motion sensor", "type": "mpu6050", "role": "observer", "binding": "mpu6050_i2c", "address": "0x68", "expected": { "maximumAccelerationStddevG": 0.08, "maximumInvalidSampleRate": 0.05 } },
+    { "id": "climate1", "label": "DHT11 climate sensor", "type": "dht11", "role": "observer", "binding": "dht11_data", "expected": { "temperatureC": [10, 50], "humidityPercent": [10, 90], "maximumInvalidSampleRate": 0.1 } },
+    { "id": "distance1", "label": "HC-SR04 distance sensor", "type": "hc_sr04", "role": "observer", "binding": "hc_sr04_timing", "echoProtectionReviewed": false, "expected": { "distanceCm": [2, 400], "maximumStddevCm": 2, "maximumTimeoutRate": 0.05 } }
+  ],
+  "expectedBehavior": { "kind": "equivalent_normalized_response", "referenceDeviceIds": ["fsr1", "fsr2", "fsr3", "fsr4"], "subjectDeviceIds": ["fsr5"], "toleranceFraction": 0.1 },
+  "procedures": { "fsrStimulus": { "kind": "repeatable_manual", "trialsPerDevice": 1, "operatorConfirmationRequired": true } },
+  "constraints": { "maximumExperiments": 24, "physicalSourceRequiredForConfirmation": true, "humanApprovalBeforeModification": true, "allowedResistorOhms": [10000, 22000, 33000, 47000, 56000, 68000, 100000], "maximumDividerCurrentMilliamps": 1 }
 }
