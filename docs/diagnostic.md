@@ -11,7 +11,7 @@ Treat the HC-SR04 as an independent DUT. Do not use it to prove servo motion or 
 
 | Observation | Diagnosis | Exact next action |
 | --- | --- | --- |
-| No echo / repeated timeout | power, wiring, target, or Echo-level interface issue | Check 5 V, GND, D26 trigger, D35 protected Echo, and target position before replacing the sensor. |
+| No echo / repeated timeout | power, wiring, target, or Echo-level interface issue | Check 5 V, GND, GPIO16 trigger, GPIO17 protected Echo, and target position before replacing the sensor. |
 | High variance at a fixed target | alignment, multipath, loose wiring, or supply noise | Re-align a flat target, clear secondary reflectors, and inspect wiring/decoupling. |
 | Readings do not follow target movement | geometry, blind-zone, or sensor response issue | Test outside the 2 cm blind zone with a flat target normal to the sensing cone. |
 | Stable readings but fixed offset | baseline/calibration offset | Record the offset against a declared reference; do not claim accuracy without that reference. |

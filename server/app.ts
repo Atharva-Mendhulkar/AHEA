@@ -2,7 +2,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSessionSchema, executeDecisionSchema, interventionSchema, problemSchema } from "../shared/schemas.js";
-import { defaultProjectContext, optionalProjectContexts } from "./config.js";
+import { defaultProjectContext, projectContexts } from "./config.js";
 import { Coordinator, DomainError } from "./coordinator.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -91,7 +91,7 @@ export function createApp(coordinator: Coordinator) {
   }));
 
   app.get("/api/project-context/default", (_request, response) => response.json(defaultProjectContext));
-  app.get("/api/project-contexts", (_request, response) => response.json({ loopback: defaultProjectContext, ...optionalProjectContexts }));
+  app.get("/api/project-contexts", (_request, response) => response.json(projectContexts));
   app.get("/api/simulation/catalog", (_request, response) => response.json(coordinator.getSimulationCatalog()));
 
   app.use(express.static(path.resolve(here, "../web")));

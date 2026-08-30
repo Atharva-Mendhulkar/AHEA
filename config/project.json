@@ -2,19 +2,19 @@
   "schemaVersion": 2,
   "project": { "id": "esp32s3-loopback-demo", "name": "ESP32-S3 protected loopback", "goal": "Determine whether a registered digital waveform reaches a physically separate destination node and adapt the next experiment to the evidence." },
   "profile": { "kind": "loopback", "moduleId": "core.loopback.v1" },
-  "hardwareProfileId": "esp32s3-loopback-safe-disabled-v1",
+  "hardwareProfileId": "esp32s3-n16r8-loopback-2k-10k-reviewed-v1",
   "primaryTargetId": "loopback-path",
   "targets": [{
     "id": "loopback-path", "label": "Protected waveform path", "type": "loopback",
     "bindingIds": ["gpio4_stimulus", "gpio5_source_observer", "gpio6_destination_observer"],
     "bindings": { "stimulus": "gpio4_stimulus", "sourceObserver": "gpio5_source_observer", "destinationObserver": "gpio6_destination_observer" },
-    "fixture": { "stimulusSeriesOhms": 1000, "observerSeriesOhms": 4700, "destinationPulldownOhms": 100000, "removableJumper": true },
+    "fixture": { "stimulusSeriesOhms": 2000, "observerSeriesOhms": 10000, "destinationPulldownOhms": 10000, "removableJumper": true },
     "expected": { "frequencyHz": 1000, "dutyPercent": 50, "durationMs": 500, "frequencyToleranceFraction": 0.05, "dutyTolerancePercent": 5, "minimumCorrelation": 0.95 },
     "limitations": ["Timing is referenced to the ESP32-S3 timebase, not an independent instrument.", "The fixture supports bounded path conclusions only."]
   }],
   "allowedPlanIds": ["loopback.observe-destination.1khz.v1", "loopback.observe-source.1khz.v1", "loopback.compare-endpoints.1khz.v1", "loopback.measure-timing.1khz.v1", "loopback.inspect-stimulus.static.v1", "loopback.repeat-synchronized.500hz.v1", "loopback.verify-path.1khz.v1"],
   "procedures": {
-    "setupChecklist": ["Use a common ground and 3.3 V logic only.", "Wire GPIO4 through 1 kΩ to the source node.", "Wire GPIO5 and GPIO6 to their nodes through separate 4.7 kΩ resistors.", "Install a removable source-to-destination jumper and a 100 kΩ destination pull-down."],
+    "setupChecklist": ["Use a common ground and 3.3 V logic only.", "Wire GPIO4 through 2 kΩ to the source node.", "Wire GPIO5 and GPIO6 to their nodes through separate 10 kΩ resistors.", "Install a removable source-to-destination jumper and a 10 kΩ destination pull-down."],
     "interventionSafety": ["Power down before changing the jumper or wiring.", "A human must perform and declare every physical change."],
     "reference": { "kind": "baseline_characterization", "description": "Waveform consistency is evaluated against the ESP32-S3 timebase; no independent reference instrument is present." }
   },

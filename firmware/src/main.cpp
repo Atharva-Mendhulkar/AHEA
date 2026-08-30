@@ -4,7 +4,7 @@
 #include <Wire.h>
 #include <math.h>
 #include <mbedtls/sha256.h>
-#include <esp_task_wdt.h>
+#include <esp_task_wdt.h>[]
 #include "hardware_profile.h"
 #include "safety_state.h"
 
@@ -150,7 +150,7 @@ void addRegistry(JsonObject data) {
 
 bool profileValid() {
   const unsigned int reviewed_profiles =
-    (ahea::profile::LOOPBACK_FIXTURE_REVIEWED ? 1U : 0U) +
+    (ahea::profile::LOOPBACK_FIXTURE_REVIEWED && ahea::profile::LOOPBACK_STIMULUS_SERIES_OHMS == 2000 && ahea::profile::LOOPBACK_OBSERVER_SERIES_OHMS == 10000 && ahea::profile::LOOPBACK_DESTINATION_PULLDOWN_OHMS == 10000 ? 1U : 0U) +
     (ahea::profile::HC_SR04_ENABLED && ahea::profile::HC_SR04_ECHO_DIVIDER_REVIEWED && ahea::profile::HC_SR04_ECHO_UPPER_OHMS == 8200 && ahea::profile::HC_SR04_ECHO_LOWER_OHMS == 10000 ? 1U : 0U) +
     (ahea::profile::MPU6050_ENABLED && ahea::profile::I2C_PULLUPS_AT_3V3_REVIEWED ? 1U : 0U) +
     (ahea::profile::DHT11_ENABLED && ahea::profile::DHT11_3V3_INTERFACE_REVIEWED ? 1U : 0U);

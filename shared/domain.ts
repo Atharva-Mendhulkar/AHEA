@@ -59,7 +59,9 @@ interface BaseTargetContext { id: string; label: string; type: ProfileKind; bind
 export interface LoopbackTargetContext extends BaseTargetContext {
   type: "loopback";
   bindings: { stimulus: "gpio4_stimulus"; sourceObserver: "gpio5_source_observer"; destinationObserver: "gpio6_destination_observer" };
-  fixture: { stimulusSeriesOhms: 1000; observerSeriesOhms: 4700; destinationPulldownOhms: 100000; removableJumper: true };
+  fixture:
+    | { stimulusSeriesOhms: 1000; observerSeriesOhms: 4700; destinationPulldownOhms: 100000; removableJumper: true }
+    | { stimulusSeriesOhms: 2000; observerSeriesOhms: 10000; destinationPulldownOhms: 10000; removableJumper: true };
   expected: { frequencyHz: 1000; dutyPercent: 50; durationMs: 500; frequencyToleranceFraction: number; dutyTolerancePercent: number; minimumCorrelation: number };
 }
 export interface Hcsr04TargetContext extends BaseTargetContext {

@@ -7,7 +7,10 @@ const baseTarget = { id, label: z.string().min(1).max(160), bindingIds: z.array(
 const loopbackTargetSchema = z.object({
   ...baseTarget, type: z.literal("loopback"),
   bindings: z.object({ stimulus: z.literal("gpio4_stimulus"), sourceObserver: z.literal("gpio5_source_observer"), destinationObserver: z.literal("gpio6_destination_observer") }).strict(),
-  fixture: z.object({ stimulusSeriesOhms: z.literal(1000), observerSeriesOhms: z.literal(4700), destinationPulldownOhms: z.literal(100000), removableJumper: z.literal(true) }).strict(),
+  fixture: z.union([
+    z.object({ stimulusSeriesOhms: z.literal(1000), observerSeriesOhms: z.literal(4700), destinationPulldownOhms: z.literal(100000), removableJumper: z.literal(true) }).strict(),
+    z.object({ stimulusSeriesOhms: z.literal(2000), observerSeriesOhms: z.literal(10000), destinationPulldownOhms: z.literal(10000), removableJumper: z.literal(true) }).strict(),
+  ]),
   expected: z.object({ frequencyHz: z.literal(1000), dutyPercent: z.literal(50), durationMs: z.literal(500), frequencyToleranceFraction: z.number().positive().max(.25), dutyTolerancePercent: z.number().positive().max(20), minimumCorrelation: z.number().min(0).max(1) }).strict(),
 }).strict();
 const hcsr04TargetSchema = z.object({
