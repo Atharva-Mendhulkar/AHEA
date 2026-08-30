@@ -173,7 +173,13 @@ export function deriveEvidence(observations: Observation[], context: ProjectCont
   const failed = verificationAssessments.length >= required && consecutivePasses === 0;
   const status = !interventionDeclared ? "NOT_RUN" : consecutivePasses >= required ? (mode === "physical" ? "PASSED" : "SIMULATED_PASS") : failed ? "FAILED" : "PENDING";
   const recommendations = recommendationFor(state, targetId, confidence, diagnosticAssessments.map((entry) => entry.observationId));
-  const conclusion = conclusionFor(state, diagnosticAssessments, context, recommendations);
+  const conclusion = status === "PASSED" ? {
+    disposition: "READY_TO_USE" as const,
+    headline: "Repair verified. The signal path is completely OK for the tested profile.",
+    summary: `The declared repair passed ${required} consecutive physical verification runs.`,
+    adjustments: [],
+    observationIds: [...diagnosticAssessments, ...verificationAssessments].map((entry) => entry.observationId),
+  } : conclusionFor(state, diagnosticAssessments, context, recommendations);
   const observed = assessments.map((assessment) => statement("observed", assessment));
   const inferences: EvidenceStatement[] = state === "INSUFFICIENT_EVIDENCE" ? [] : [{ id: `inference:${state.toLowerCase()}`, text: ({ DESTINATION_MISSING: "The destination is absent; source verification is required before attributing the path.", DESTINATION_MALFORMED: "The destination waveform is outside registered bounds; source timing must be separated from path timing.", SOURCE_MALFORMED: "The source does not match the registered stimulus, so a downstream repair claim is not supported.", PATH_OPEN_SUPPORTED: "A valid source and absent destination support an open signal path under the tested conditions.", SIGNAL_PATH_FAULT_SUPPORTED: "A valid source and malformed destination support a bounded signal-path fault diagnosis.", CONFLICTING_EVIDENCE: "Accepted captures conflict; repeat synchronized capture or stop inconclusive.", NORMAL: "The tested source and destination behavior agrees with configured bounds.", SENSOR_ANOMALY: "The optional sensor profile returned an out-of-bounds or invalid result." } as Record<Exclude<EvidenceState, "INSUFFICIENT_EVIDENCE">, string>)[state as Exclude<EvidenceState, "INSUFFICIENT_EVIDENCE">], observationIds: diagnosticAssessments.map((entry) => entry.observationId), limitations: targetById(context, targetId)?.limitations ?? [] }];
   return {

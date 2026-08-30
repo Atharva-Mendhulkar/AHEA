@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { rm } from "node:fs/promises";
+import { deriveEvidence } from "../server/evidence.js";
 import { runDiagnostic, setup } from "./helpers.js";
 
 const roots: string[] = [];
@@ -31,5 +32,16 @@ describe("deterministic loopback evidence", () => {
     const value = await setup("loopback_conflicting"); roots.push(value.root); const session = await runDiagnostic(value.coordinator, value.session);
     expect(session.lifecycle).toBe("INCONCLUSIVE"); expect(session.evidence.state).toBe("CONFLICTING_EVIDENCE");
     expect(session.observations.filter((entry) => entry.planId.includes("repeat-synchronized"))).toHaveLength(2);
+  });
+  it("replaces the adjustment verdict after two passing physical verification runs", async () => {
+    const value = await setup("loopback_open"); roots.push(value.root); let session = await runDiagnostic(value.coordinator, value.session); const recommendation = session.evidence.recommendations[0]!;
+    session = await value.coordinator.declareIntervention(session.id, "Powered down and installed the removable jumper.", recommendation.id, true);
+    session = await value.coordinator.executePending(session.id, session.pendingDecision!.id, session.version, true, "Fixture restored and powered.");
+    session = await value.coordinator.executePending(session.id, session.pendingDecision!.id, session.version, true, "Fixture restored and powered.");
+    const physicalEvidence = deriveEvidence(session.observations, session.projectContext, session.targetId, true, "physical");
+    expect(physicalEvidence.verification.status).toBe("PASSED");
+    expect(physicalEvidence.conclusion?.disposition).toBe("READY_TO_USE");
+    expect(physicalEvidence.conclusion?.headline).toMatch(/Repair verified/i);
+    expect(physicalEvidence.conclusion?.adjustments).toEqual([]);
   });
 });
