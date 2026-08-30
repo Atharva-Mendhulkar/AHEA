@@ -83,33 +83,55 @@ Read the [product requirements](prd.md), [architecture](docs/architecture.md), a
 
 ### How It Works
 
-```text
-Immutable project context + reviewed capability registry
-                            ↓
-             Evidence-dependent experiment set
-                            ↓
-              Agent selects an opaque plan ID
-                            ↓
-                 Safety gateway validates
-                            ↓
-                Simulator or ESP32-S3 adapter
-                            ↓
-               Provenance-complete observation
-                            ↓
-                 Deterministic evidence rules
-                            ↓
- Normal / inconclusive / diagnosis → human change → verification
+```mermaid
+flowchart TD
+    A["Immutable Project Context<br/>Reviewed Capability Registry"]
+    B["Evidence-Dependent<br/>Experiment Set"]
+    C["Agent<br/>Opaque Plan ID"]
+    D{"Safety Gateway<br/>Validation"}
+    E["Simulator"]
+    F["ESP32-S3 Adapter"]
+    G["Provenance-Complete<br/>Observation"]
+    H["Deterministic<br/>Evidence Rules"]
+    I["Normal"]
+    J["Inconclusive"]
+    K["Diagnosis"]
+    L["Human Change"]
+    M["Verification"]
+
+    A --> B
+    B --> C
+    C --> D
+
+    D -->|Approved| E
+    D -->|Approved| F
+
+    E --> G
+    F --> G
+
+    G --> H
+
+    H --> I
+    H --> J
+    H --> K
+
+    I --> L
+    J --> L
+    K --> L
+
+    L --> M
+    M --> G
 ```
 
 The required physical proof uses this protected 3.3 V fixture:
 
-```text
-GPIO4 ── 1 kΩ ── source ── removable jumper ── destination ── 100 kΩ ── GND
-                    │                              │
-                  4.7 kΩ                         4.7 kΩ
-                    │                              │
-                  GPIO5                          GPIO6
-```
+<p align="center">
+  <img
+    src="./docs/ahea-gpio-test-circuit.svg"
+    alt="AHEA GPIO continuity and isolation test circuit"
+    width="850"
+  />
+</p>
 
 The registered initial plan generates a 1 kHz, 50% duty-cycle waveform for 500 ms. Because the same ESP32-S3 generates and observes it, the result establishes internal timing consistency, not independent calibration.
 
@@ -376,9 +398,14 @@ Contributions that make hardware diagnosis safer, more reproducible, or easier t
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing protocol, firmware, evidence, or lifecycle behavior.
 
-<a href="https://github.com/Atharva-Mendhulkar/AHEA/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Atharva-Mendhulkar/AHEA" alt="AHEA contributors" />
-</a>
+<p align="center">
+  <a href="https://github.com/Atharva-Mendhulkar/AHEA/graphs/contributors">
+    <img
+      src="https://contrib.rocks/image?repo=Atharva-Mendhulkar/AHEA"
+      alt="AHEA contributors"
+    />
+  </a>
+</p>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -401,12 +428,10 @@ Issues and feature requests: [GitHub Issues](https://github.com/Atharva-Mendhulk
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
-* [Best README Template](https://github.com/othneildrew/Best-README-Template) for the document structure
 * [Espressif Systems](https://www.espressif.com/) for the ESP32-S3 platform
 * [PlatformIO](https://platformio.org/) for embedded builds and testing
 * [ArduinoJson](https://arduinojson.org/) for the firmware JSON protocol
 * [Vitest](https://vitest.dev/) for deterministic application tests
-* [Shields.io](https://shields.io/) and [contrib.rocks](https://contrib.rocks/) for repository badges
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
