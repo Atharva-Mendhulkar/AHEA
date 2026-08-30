@@ -16,10 +16,10 @@
     <img src="logo.svg" alt="AHEA logo" width="120" height="120" />
   </a>
 
-  <h3 align="center">AHEA Hardware Agent</h3>
+  <h3 align="center">Autonomous Hardware Engineering Agent</h3>
 
   <p align="center">
-    Evidence-driven physical diagnostics for ESP32-S3 systems.
+    Evidence-driven physical diagnostics and troubleshooting for hardware projects using ESP32-S3.
     <br />
     <a href="docs/architecture.md"><strong>Explore the documentation »</strong></a>
     <br />
