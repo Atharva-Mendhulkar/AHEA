@@ -10,6 +10,7 @@ describe("optional profiles reuse the core loop", () => {
   it.each(["hc_sr04", "mpu6050", "dht11"] as const)("runs the %s normal fixture without a repair", async (kind) => {
     const value = await setup("sensor_normal", optionalProjectContexts[kind]); roots.push(value.root); const session = await runDiagnostic(value.coordinator, value.session);
     expect(session.lifecycle).toBe("CONCLUDED_NORMAL"); expect(session.evidence.state).toBe("NORMAL"); expect(session.intervention).toBeUndefined();
+    expect(session.evidence.conclusion).toMatchObject({ disposition: "READY_TO_USE", headline: "Sensor is completely OK for the tested profile." });
     expect(session.observations.every((entry) => entry.targetType === kind)).toBe(true);
     expect(session.observations.every((entry) => entry.series.length > 0)).toBe(true);
   });
@@ -49,6 +50,14 @@ describe("optional profiles reuse the core loop", () => {
   it("stops a sensor fault inconclusive without inventing a modification", async () => {
     const value = await setup("sensor_fault", optionalProjectContexts.mpu6050); roots.push(value.root); const session = await runDiagnostic(value.coordinator, value.session);
     expect(session.lifecycle).toBe("INCONCLUSIVE"); expect(session.evidence.state).toBe("SENSOR_ANOMALY"); expect(session.evidence.recommendations).toEqual([]);
+    expect(session.evidence.conclusion).toMatchObject({ disposition: "DO_NOT_USE", headline: "Sensor failed the registered checks and cannot be used in this setup." });
+  });
+  it("gives evidence-bounded Jugaad adjustments for an out-of-bounds but responsive sensor", async () => {
+    const simulation = { engine: "generated", seed: "hc-noisy", scenario: { condition: "noisy", distanceCm: 25 } } as const;
+    const value = await setup("sensor_normal", optionalProjectContexts.hc_sr04, simulation); roots.push(value.root); const session = await runDiagnostic(value.coordinator, value.session);
+    expect(session.evidence.state).toBe("SENSOR_ANOMALY");
+    expect(session.evidence.conclusion?.disposition).toBe("ADJUST_AND_RETEST");
+    expect(session.evidence.conclusion?.adjustments.join(" ")).toMatch(/Echo divider/i);
   });
   it("rejects capabilities registered for a different profile", async () => {
     const context = structuredClone(optionalProjectContexts.mpu6050);

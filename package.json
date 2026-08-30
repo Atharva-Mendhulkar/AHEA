@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:openai": "AHEA_LIVE_OPENAI=1 vitest run tests/openai.live.test.ts",
+    "test:gemini": "AHEA_LIVE_GEMINI=1 vitest run tests/gemini.live.test.ts",
     "check": "npm run build && npm test",
     "firmware:build": "PATH=\".venv/bin:$PATH\" pio run -d firmware",
     "firmware:build:mpu6050": "PATH=\".venv/bin:$PATH\" pio run -d firmware -e esp32s3_mpu6050",
@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "openai": "^5.20.3",
     "serialport": "^13.0.0",
     "zod": "^3.25.76"
   },

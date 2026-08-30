@@ -34,5 +34,5 @@ export const optionalProjectContexts: Record<"hc_sr04" | "mpu6050" | "dht11", Pr
 };
 
 export const projectContexts = { loopback: defaultProjectContext, ...optionalProjectContexts };
-export const appConfig = { port: Number(process.env.PORT ?? 3000), dataDir: process.env.AHEA_DATA_DIR ?? "./data", model: process.env.OPENAI_MODEL ?? "gpt-5-mini", serialPath: process.env.AHEA_SERIAL_PATH, physicalEnabled: process.env.AHEA_PHYSICAL_ENABLED === "true" };
+export const appConfig = { port: Number(process.env.PORT ?? 3000), dataDir: process.env.AHEA_DATA_DIR ?? "./data", model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash", serialPath: process.env.AHEA_SERIAL_PATH, physicalEnabled: process.env.AHEA_PHYSICAL_ENABLED === "true" };
 export function projectContextDigest(context: ProjectContext): string { return createHash("sha256").update(JSON.stringify(context)).digest("hex"); }

@@ -8,7 +8,7 @@ Start with the [phased roadmap](docs/roadmap.md). Choose work from the earliest 
 
 1. Install Node.js 22+, npm, and optionally PlatformIO.
 2. Run `npm install`.
-3. Copy `.env.example` to `.env`; an OpenAI key is optional.
+3. Copy `.env.example` to `.env`; a Gemini key is optional.
 4. Run `npm run check` before submitting a change.
 5. For firmware work, also run `npm run firmware:test` and `npm run firmware:build`.
 
@@ -35,7 +35,7 @@ Start with the [phased roadmap](docs/roadmap.md). Choose work from the earliest 
 
 - Every safety regression needs a failing test before or with the fix.
 - Simulator changes must cover intact, open-path, malformed-destination, stimulus-fault, conflicting-evidence, and verification-failure branches.
-- OpenAI-dependent tests stay opt-in and must record response IDs; deterministic tests must not require a network connection.
+- Gemini-dependent tests stay opt-in; deterministic tests must not require a network connection.
 - Physical claims require documented hardware-in-loop results and must not be inferred from simulator results.
 
 ## Commit and review checklist

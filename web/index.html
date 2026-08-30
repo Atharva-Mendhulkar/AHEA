@@ -6,7 +6,7 @@
     <meta name="description" content="AHEA — evidence-driven ESP32-S3 hardware diagnosis">
     <link rel="icon" href="/logo.svg" type="image/svg+xml">
     <script>const initialTheme = localStorage.getItem("ahea-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); document.documentElement.dataset.theme = initialTheme; document.documentElement.classList.toggle("dark", initialTheme === "dark");</script>
-    <title>AHEA — ESP32-S3 Diagnostic Agent</title>
+    <title>AHEA — Autonomous Hardware Engineering Agent</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -18,7 +18,7 @@
 
     <main class="shell">
       <section id="setup" class="setup-layout">
-        <div class="setup-copy"><span class="section-index">AHEA / ESP32-S3</span><p class="eyebrow">Evidence-driven hardware diagnostics</p><h1>Observe first.<br>Change only with evidence.</h1><p class="lede">AHEA selects registered experiments, validates them at a safety boundary, and keeps physical observations separate from inference and repair advice.</p><div class="principles"><span>Registered plans</span><span>Deterministic evidence</span><span>Human intervention</span></div><a class="button button-secondary setup-link" href="/circuit-setup">Setup circuit <span aria-hidden="true">→</span></a></div>
+        <div class="setup-copy"><span class="section-index">AHEA with ESP32-S3</span><p class="eyebrow">Evidence-driven hardware diagnostics and troubleshooting</p><h1>Observe first.<br>Change only with evidence.</h1><p class="lede">AHEA selects registered experiments, validates them at a safety boundary, and keeps physical observations separate from inference and repair advice.</p><div class="principles"><span>Registered plans</span><span>Deterministic evidence</span><span>Human intervention</span></div><a class="button button-secondary setup-link" href="/circuit-setup">Setup circuit <span aria-hidden="true">→</span></a></div>
         <form id="start-form" class="card setup-card">
           <div class="card-header"><div><p class="eyebrow">New investigation</p><h2>Select a diagnostic profile</h2></div><span class="agent-orb idle" aria-hidden="true"></span></div>
           <div class="field-row">
@@ -58,7 +58,19 @@
               <div><span>Selected plan</span><strong id="selected-plan">—</strong></div><div><span>Evidence state</span><strong id="evidence-state">—</strong></div><div><span>Confidence</span><strong id="confidence-inline">UNKNOWN</strong></div><div><span>Experiments</span><strong id="experiment-count">0</strong></div><div><span>Verification</span><strong id="verification-count">0 / 2</strong></div><div><span>Registry</span><strong id="registry-digest">—</strong></div>
             </div>
 
-            <div class="diagnostic-workspace">
+            <section id="outcome-region" class="outcome-region hidden" aria-labelledby="conclusion-heading">
+              <article id="conclusion-card" class="conclusion-card">
+                <header class="conclusion-header"><p id="conclusion-heading" class="eyebrow">CONCLUSION</p><span id="conclusion-confidence" class="badge">UNKNOWN</span></header>
+                <h3 id="conclusion"></h3>
+                <p id="conclusion-basis"></p>
+              </article>
+              <section id="recommendation-region" class="recommendation-region">
+                <section id="recommendation" class="recommendation-stack"></section>
+                <div id="intervention-action" class="intervention-action hidden"><label class="field">Human intervention<input id="intervention" value="Powered down and restored the removable jumper"></label><label class="check-label"><input id="safety-confirmed" type="checkbox"> I powered down and followed the safety constraints</label><button id="declare" class="button button-primary" type="button">Declare change and verify</button></div>
+              </section>
+            </section>
+
+            <div id="diagnostic-workspace" class="diagnostic-workspace">
               <section class="graph-region diagnostic-panel" aria-labelledby="waveform-heading">
                 <div class="section-heading"><p id="waveform-heading" class="eyebrow">Live waveform</p><span id="graph-mode">Waiting</span></div>
                 <div class="state-graph"><canvas id="state-graph" aria-label="Latest observed sensor or waveform channels"></canvas><div id="graph-empty" class="graph-empty">Run a registered experiment to view its trace</div></div>
@@ -74,11 +86,6 @@
             </div>
 
             <section class="diagnostic-panel hypotheses-panel"><div class="section-heading"><p class="eyebrow">Hypotheses</p><span>Evidence-ranked, not probabilistic</span></div><div id="hypotheses" class="hypothesis-grid"></div></section>
-
-            <section id="recommendation-region" class="recommendation-region">
-              <section id="recommendation" class="recommendation-stack"></section>
-              <div id="intervention-action" class="intervention-action hidden"><label class="field">Human intervention<input id="intervention" value="Powered down and restored the removable jumper"></label><label class="check-label"><input id="safety-confirmed" type="checkbox"> I powered down and followed the safety constraints</label><button id="declare" class="button button-primary" type="button">Declare change and verify</button></div>
-            </section>
             <footer class="agent-actions">
               <button id="start-investigation" class="button button-primary" type="button">Start investigation</button>
               <div id="execute-action" class="action-cluster hidden"><div class="operator-prompt"><div class="operator-prompt-heading"><p class="eyebrow">Operator action</p><span id="auto-run-status" class="auto-run-status hidden" role="status">Automatic capture</span></div><strong id="operator-prompt">Confirm the declared setup before capture.</strong><small id="simulation-prompt-note">This advances a scripted simulation fixture; no physical motion is sensed.</small></div><div id="physical-execution-controls" class="physical-execution-controls"><label class="check-label"><input id="setup-confirmed" type="checkbox"> <span id="confirmation-label">Fixture matches the declared setup</span></label><button id="execute" class="button button-primary" type="button">Action complete — capture data</button></div><button id="auto-run-toggle" class="button button-secondary auto-run-toggle hidden" type="button">Pause automation</button></div>

@@ -1,13 +1,13 @@
 import { pathToFileURL } from "node:url";
 import { appConfig } from "./config.js";
 import { JsonStore } from "./store.js";
-import { OpenAIDecisionClient } from "./agent.js";
+import { GeminiDecisionClient } from "./agent.js";
 import { Coordinator } from "./coordinator.js";
 import { createApp } from "./app.js";
 
 export function buildApplication() {
   const store = new JsonStore(appConfig.dataDir);
-  const agent = new OpenAIDecisionClient(appConfig.model);
+  const agent = new GeminiDecisionClient(appConfig.model);
   const coordinator = new Coordinator({
     store,
     agent,

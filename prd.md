@@ -327,7 +327,7 @@ Items removed from the core path:
 
 - FSR-specific project context, schemas, simulator fixtures, evidence, coordinator targeting, and default firmware profile;
 - tuning/candidate solver logic and resistor-specific UI/assets assumptions;
-- Jugaad wording and adjustment presentation;
+- the legacy unconstrained Jugaad solver; the dashboard now presents only deterministic, evidence-bounded practical adjustments under a clearly labeled Jugaad section;
 - relay/actuator placeholders and sensor-first module assumptions; and
 - unsupported calibration language.
 

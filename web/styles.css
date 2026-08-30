@@ -397,6 +397,9 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
 .telemetry-strip strong { display: block; margin-top: .15rem; font: 650 clamp(.7rem, .85vw, .84rem)/1.2 ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
 
 .diagnostic-workspace { display: grid; grid-template-columns: minmax(0, 1.38fr) minmax(430px, 1fr); gap: .75rem; align-items: stretch; }
+.diagnostic-workspace.outcome-ready .analysis-view { order: 1; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto; }
+.diagnostic-workspace.outcome-ready .graph-region { order: 2; grid-column: 1 / -1; }
+.diagnostic-workspace.outcome-ready .verification-panel { grid-column: 1 / -1; }
 .diagnostic-panel { min-width: 0; padding: .72rem; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--background) 88%, transparent); }
 .diagnostic-panel > .eyebrow, .section-heading .eyebrow { margin: 0; }
 .section-heading { min-height: 22px; display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .45rem; }
@@ -448,7 +451,19 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
 .project-checks ol { columns: 2; margin: .5rem 0 0; padding-left: 1rem; color: var(--muted-foreground); font-size: .7rem; }
 .project-checks li { padding: .12rem .3rem .12rem 0; break-inside: avoid; }
 
-.recommendation-region:not(.hidden) { margin-top: .75rem; }
+.outcome-region { display: grid; grid-template-columns: minmax(260px, .72fr) minmax(0, 1.28fr); gap: .75rem; margin-bottom: .75rem; animation: materialize 360ms cubic-bezier(.2,.8,.2,1); }
+.conclusion-card { min-width: 0; padding: .82rem .88rem; border: 1px solid var(--border); border-radius: 9px; background: var(--muted); }
+.conclusion-card[data-tone="success"] { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); background: var(--success-soft); }
+.conclusion-card[data-tone="warning"] { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: var(--warning-soft); }
+.conclusion-card[data-tone="danger"] { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--danger-soft); }
+.conclusion-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.conclusion-header .eyebrow { margin: 0; }
+.conclusion-card[data-tone="success"] .conclusion-header .eyebrow { color: var(--success); }
+.conclusion-card[data-tone="warning"] .conclusion-header .eyebrow { color: var(--warning); }
+.conclusion-card[data-tone="danger"] .conclusion-header .eyebrow { color: var(--danger); }
+.conclusion-card h3 { margin: .72rem 0 .42rem; font-size: clamp(1.05rem, 1.5vw, 1.35rem); line-height: 1.25; letter-spacing: -.018em; text-wrap: pretty; }
+.conclusion-card > p { margin: 0; color: var(--muted-foreground); font-size: .69rem; line-height: 1.4; }
+.recommendation-region { min-width: 0; }
 .recommendation-card { display: grid; grid-template-columns: minmax(260px, .72fr) minmax(0, 1.28fr); gap: .65rem 1rem; padding: .78rem .85rem; border: 1px solid color-mix(in srgb, var(--warning) 48%, var(--border)); border-radius: 9px; background: var(--warning-soft); }
 .recommendation-header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .recommendation-header .eyebrow { margin: 0; color: var(--warning); }
@@ -459,6 +474,13 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
 .recommendation-details p { margin: 0; padding-left: .65rem; border-left: 1px solid color-mix(in srgb, var(--warning) 36%, var(--border)); font-size: .65rem; line-height: 1.38; }
 .recommendation-details span { display: block; margin-bottom: .12rem; color: var(--muted-foreground); font: .56rem ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .05em; text-transform: uppercase; }
 .recommendation-details b { font: inherit; font-weight: 600; overflow-wrap: anywhere; }
+.jugaad-card { grid-template-columns: 1fr; height: 100%; }
+.jugaad-card[data-tone="success"] { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); background: var(--success-soft); }
+.jugaad-card[data-tone="danger"] { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--danger-soft); }
+.jugaad-card[data-tone="success"] .recommendation-header .eyebrow { color: var(--success); }
+.jugaad-card[data-tone="danger"] .recommendation-header .eyebrow { color: var(--danger); }
+.jugaad-card .recommendation-change > p { margin-top: .4rem; }
+.jugaad-steps { display: grid; gap: .35rem; margin: .5rem 0 0; padding-left: 1.1rem; color: var(--muted-foreground); font-size: .68rem; line-height: 1.4; }
 .intervention-action { width: 100%; display: grid; grid-template-columns: minmax(250px, 1.1fr) minmax(280px, 1fr) auto; align-items: end; gap: .7rem; padding: .7rem .85rem; border: 1px solid color-mix(in srgb, var(--warning) 48%, var(--border)); border-top: 0; border-radius: 0 0 9px 9px; background: color-mix(in srgb, var(--warning-soft) 72%, var(--background)); }
 .agent-console[data-agent-state="WAITING_FOR_INTERVENTION"] .recommendation-card { border-radius: 9px 9px 0 0; }
 
@@ -505,6 +527,7 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
   .telemetry-strip div:nth-child(3) { border-right: 0; }
   .telemetry-strip div:nth-child(-n+3) { border-bottom: 1px solid var(--border); }
   .diagnostic-workspace { grid-template-columns: 1fr; }
+  .outcome-region { grid-template-columns: 1fr; }
   .state-graph { height: clamp(300px, 42vw, 360px); }
   .analysis-view { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .evidence-panel .statement-list { max-height: none; }
@@ -521,7 +544,7 @@ dialog::backdrop { background: rgba(0,0,0,.36); backdrop-filter: blur(3px); anim
   .telemetry-strip div, .telemetry-strip div:nth-child(3) { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .telemetry-strip div:nth-child(2n) { border-right: 0; }
   .telemetry-strip div:nth-last-child(-n+2) { border-bottom: 0; }
-  .analysis-view, .hypothesis-grid, .recommendation-card, .recommendation-details, .session-sidebar { grid-template-columns: 1fr; }
+  .analysis-view, .diagnostic-workspace.outcome-ready .analysis-view, .hypothesis-grid, .recommendation-card, .recommendation-details, .session-sidebar { grid-template-columns: 1fr; }
   .verification-panel { grid-column: auto; }
   .verification-summary { grid-template-columns: auto minmax(0, 1fr); }
   .verification-summary > .badge { justify-self: end; }

@@ -139,10 +139,15 @@ export interface Recommendation {
   id: string; targetId: string; kind: "restore_loopback_path" | "inspect_signal_path"; action: string; basis: string; expectedEffect: string;
   safetyConstraints: string[]; verificationPlanId: string; confidence: ConfidenceLabel;
 }
+export const diagnosticDispositions = ["PENDING", "READY_TO_USE", "ADJUST_AND_RETEST", "DO_NOT_USE", "INCONCLUSIVE"] as const;
+export type DiagnosticDisposition = (typeof diagnosticDispositions)[number];
+export interface DiagnosticConclusion {
+  disposition: DiagnosticDisposition; headline: string; summary: string; adjustments: string[]; observationIds: string[];
+}
 export interface VerificationSummary { status: VerificationStatus; requiredConsecutivePasses: number; consecutivePasses: number; observationIds: string[]; summary: string }
 export interface EvidenceView {
   state: EvidenceState; confidence: ConfidenceLabel; assessments: ObservationAssessment[]; observed: EvidenceStatement[]; inferences: EvidenceStatement[];
-  hypotheses: HypothesisEvidence[]; recommendations: Recommendation[]; verification: VerificationSummary; limitations: string[];
+  hypotheses: HypothesisEvidence[]; recommendations: Recommendation[]; conclusion?: DiagnosticConclusion; verification: VerificationSummary; limitations: string[];
 }
 
 export const lifecycleStates = ["READY", "INVESTIGATING", "CONCLUDED_NORMAL", "INCONCLUSIVE", "DIAGNOSIS_READY", "INTERVENTION", "VERIFYING", "CONFIRMED", "FAILED_VERIFICATION", "INTERRUPTED", "ESTOPPED"] as const;
@@ -153,8 +158,8 @@ export type AgentState = (typeof agentStates)[number];
 
 export interface DecisionRecord {
   id: string; observationIds: string[]; contextDigest: string; candidateHypotheses: string[]; eligibleExperimentIds: string[];
-  selectedExperimentId: string; selectedAction: ExperimentType; objective: string; rationale: string; provider: "openai" | "deterministic";
-  model: string; responseId?: string; createdAt: string; gatewayValidation: { accepted: boolean; reasons: string[] }; decisionSource: "openai" | "fallback";
+  selectedExperimentId: string; selectedAction: ExperimentType; objective: string; rationale: string; provider: "gemini" | "openai" | "deterministic";
+  model: string; responseId?: string; createdAt: string; gatewayValidation: { accepted: boolean; reasons: string[] }; decisionSource: "gemini" | "openai" | "fallback";
 }
 export interface PendingDecision { id: string; sessionVersion: number; experiment: ExperimentDefinition; objective: string; rationale: string; experimentsRemaining: number; createdAt: string }
 export interface Intervention { description: string; declaredAt: string; recommendationId: string; safetyConfirmed: boolean }
@@ -174,7 +179,7 @@ export interface DiagnosisSession {
 export interface DiagnosisReport {
   sessionId: string; evidenceSource: SessionMode; project: ProjectContext["project"]; profile: ProjectContext["profile"]; targetId: string;
   reportedProblem?: string; observed: EvidenceStatement[]; inference: EvidenceStatement[]; recommendation: Recommendation[]; verification: VerificationSummary;
-  confidence: ConfidenceLabel; limitations: string[]; experiments: Observation[]; intervention?: Intervention; status: LifecycleState;
+  conclusion?: DiagnosticConclusion; confidence: ConfidenceLabel; limitations: string[]; experiments: Observation[]; intervention?: Intervention; status: LifecycleState;
   timing: { machineActiveMs: number; wallClockMs: number }; agenticProof: boolean;
 }
 

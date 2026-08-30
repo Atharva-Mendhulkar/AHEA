@@ -143,7 +143,7 @@ The registered initial plan generates a 1 kHz, 50% duty-cycle waveform for 500 m
 * [![TypeScript][typescript-shield]][typescript-url]
 * [![Express][express-shield]][express-url]
 * [![Zod][zod-shield]][zod-url]
-* [![OpenAI][openai-shield]][openai-url]
+* [![Gemini][gemini-shield]][gemini-url]
 * [![PlatformIO][platformio-shield]][platformio-url]
 * [![Arduino][arduino-shield]][arduino-url]
 * [![Vitest][vitest-shield]][vitest-url]
@@ -177,10 +177,11 @@ Simulation is the default and requires no attached hardware. It exercises the fu
    npm install
    ```
 
-3. Optionally provide an OpenAI API key. Without one, AHEA uses its deterministic selector:
+3. Optionally provide a Gemini API key. Without one, AHEA uses its deterministic selector:
 
    ```sh
-   export OPENAI_API_KEY="your-api-key"
+   export GEMINI_API_KEY="your-api-key"
+   export GEMINI_MODEL="gemini-2.5-flash"
    ```
 
 4. Start the development server:
@@ -197,6 +198,15 @@ Simulation is the default and requires no attached hardware. It exercises the fu
 ## Usage
 
 ### Simulation
+
+Completed investigations show one explicit use verdict:
+
+* `READY TO USE`: the sensor is completely OK within the registered test profile.
+* `ADJUST AND RETEST`: the sensor or signal path can be used after the listed practical adjustment and a passing retest.
+* `DO NOT USE`: the sensor failed a registered check and must not be used in the current setup.
+* `INCONCLUSIVE`: no safe use decision can be made until the full test is repeated.
+
+The result panel labels safe, evidence-backed adjustments as **Jugaad / Practical Adjustment**. This is not an unconstrained component or resistor optimizer: it never bypasses voltage protection, invents a repair, or replaces the required verification run.
 
 Simulation is the safest way to learn the complete diagnostic lifecycle. It uses seeded, profile-specific physical models or exact replay of an imported physical report. It preserves the same capability registry and evidence boundaries as physical mode and never makes a physical claim.
 
@@ -312,7 +322,7 @@ Every physical report should retain the firmware, board, protocol, and profile i
 | `npm run build` | Type-check and compile the application |
 | `npm test` | Run deterministic software tests |
 | `npm run check` | Build and run the software test suite |
-| `npm run test:openai` | Run the opt-in live selector test |
+| `npm run test:gemini` | Run the opt-in live Gemini selector test |
 | `npm run firmware:test` | Run native firmware safety tests |
 | `npm run firmware:build` | Build the safe-disabled ESP32-S3 firmware |
 | `npm run firmware:build:mpu6050` | Build the reviewed MPU6050 physical firmware |
@@ -456,8 +466,8 @@ Issues and feature requests: [GitHub Issues](https://github.com/Atharva-Mendhulk
 [express-url]: https://expressjs.com/
 [zod-shield]: https://img.shields.io/badge/Zod-3-3E67B1?style=for-the-badge&logo=zod&logoColor=white
 [zod-url]: https://zod.dev/
-[openai-shield]: https://img.shields.io/badge/OpenAI-optional-412991?style=for-the-badge&logo=openai&logoColor=white
-[openai-url]: https://platform.openai.com/docs/
+[gemini-shield]: https://img.shields.io/badge/Gemini-optional-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white
+[gemini-url]: https://ai.google.dev/gemini-api/docs
 [platformio-shield]: https://img.shields.io/badge/PlatformIO-6-F5822A?style=for-the-badge&logo=platformio&logoColor=white
 [platformio-url]: https://platformio.org/
 [arduino-shield]: https://img.shields.io/badge/Arduino-ESP32-00878F?style=for-the-badge&logo=arduino&logoColor=white

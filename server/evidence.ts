@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ConfidenceLabel, EvidenceState, EvidenceStatement, EvidenceView, HypothesisEvidence, Observation, ObservationAssessment, ProjectContext, Recommendation, SignalClassification } from "../shared/domain.js";
+import type { ConfidenceLabel, DiagnosticConclusion, EvidenceState, EvidenceStatement, EvidenceView, HypothesisEvidence, Observation, ObservationAssessment, ProjectContext, Recommendation, SignalClassification } from "../shared/domain.js";
 import { measurement, targetById } from "../shared/domain.js";
 
 function operationValid(observation: Observation): boolean {
@@ -109,6 +109,50 @@ function recommendationFor(state: EvidenceState, targetId: string, confidence: C
   return [{ id: open ? "restore-loopback-jumper-v1" : "inspect-loopback-path-v1", targetId, kind: open ? "restore_loopback_path" : "inspect_signal_path", action: open ? "Power down the fixture, install or reseat the removable source-to-destination jumper, inspect the connection, then restore power." : "Power down the fixture and inspect or reseat the source-to-destination connection before restoring power.", basis: open ? "The registered source waveform was valid while the destination was absent in synchronized capture." : "The source waveform was valid while destination timing remained outside bounds.", expectedEffect: "The destination should match the source within the registered frequency, duty, and correlation bounds.", safetyConstraints: ["A human must perform the change.", "Power down before changing the jumper or wiring.", "Use 3.3 V logic only and retain the registered protection resistors."], verificationPlanId: "loopback.verify-path.1khz.v1", confidence }];
 }
 
+function sensorAdjustments(kind: ProjectContext["profile"]["kind"]): string[] {
+  if (kind === "hc_sr04") return ["Verify the 8.2 kOhm / 10 kOhm Echo divider and common ground.", "Use stable power and align a flat target inside the sensing cone.", "Repeat the timing, variance, and distance-progression checks."];
+  if (kind === "mpu6050") return ["Verify the I2C address and that SDA/SCL pull-ups terminate at 3.3 V.", "Mount the sensor firmly and keep it still for the baseline capture.", "Repeat identity, stationary-noise, and directed-axis checks."];
+  return ["Verify the data pull-up terminates at 3.3 V and all grounds are common.", "Wait at least two seconds between readings and keep placement stable.", "Repeat response, environment, and valid-rate checks."];
+}
+
+function conclusionFor(state: EvidenceState, assessments: ObservationAssessment[], context: ProjectContext, recommendations: Recommendation[]): DiagnosticConclusion {
+  const observationIds = assessments.map((entry) => entry.observationId);
+  const sensor = context.profile.kind !== "loopback";
+  if (state === "NORMAL") return {
+    disposition: "READY_TO_USE",
+    headline: sensor ? "Sensor is completely OK for the tested profile." : "Signal path is completely OK for the tested profile.",
+    summary: "All registered checks completed within their declared bounds. This conclusion applies only to the tested setup and conditions.",
+    adjustments: [], observationIds,
+  };
+  if (recommendations.length) return {
+    disposition: "ADJUST_AND_RETEST",
+    headline: "The setup can be used after the recommended adjustment and a passing retest.",
+    summary: "The evidence supports a bounded practical fix. Apply it only with power removed, then run the registered verification plan.",
+    adjustments: [recommendations[0]!.action, ...recommendations[0]!.safetyConstraints], observationIds,
+  };
+  if (state === "SENSOR_ANOMALY") {
+    const hardFailure = assessments.some((entry) => !entry.valid || entry.classification === "INVALID");
+    return hardFailure ? {
+      disposition: "DO_NOT_USE",
+      headline: "Sensor failed the registered checks and cannot be used in this setup.",
+      summary: "Do not bypass the failed checks. Rule out power, wiring, and interface faults; replace the sensor if it still fails the complete retest.",
+      adjustments: sensorAdjustments(context.profile.kind), observationIds,
+    } : {
+      disposition: "ADJUST_AND_RETEST",
+      headline: "Sensor can be used after these adjustments and a passing retest.",
+      summary: "The sensor responded, but one or more measured behaviors were outside the declared bounds.",
+      adjustments: sensorAdjustments(context.profile.kind), observationIds,
+    };
+  }
+  if (state === "INSUFFICIENT_EVIDENCE") return { disposition: "PENDING", headline: "Testing is not complete.", summary: "No use decision is available until the registered experiment sequence finishes.", adjustments: [], observationIds };
+  return {
+    disposition: "INCONCLUSIVE",
+    headline: sensor ? "No safe sensor decision: do not use it until it passes a complete retest." : "No safe use decision can be made from the current evidence.",
+    summary: "The observations are incomplete or conflicting, so a repair or normal-use claim would be unsafe.",
+    adjustments: sensor ? sensorAdjustments(context.profile.kind) : [], observationIds,
+  };
+}
+
 export function deriveEvidence(observations: Observation[], context: ProjectContext, targetId: string, interventionDeclared: boolean, mode: "physical" | "simulation"): EvidenceView {
   const controlled = observations.filter((entry) => entry.phase !== "monitoring");
   const assessments = controlled.map((entry) => assessObservation(entry, context));
@@ -129,10 +173,11 @@ export function deriveEvidence(observations: Observation[], context: ProjectCont
   const failed = verificationAssessments.length >= required && consecutivePasses === 0;
   const status = !interventionDeclared ? "NOT_RUN" : consecutivePasses >= required ? (mode === "physical" ? "PASSED" : "SIMULATED_PASS") : failed ? "FAILED" : "PENDING";
   const recommendations = recommendationFor(state, targetId, confidence, diagnosticAssessments.map((entry) => entry.observationId));
+  const conclusion = conclusionFor(state, diagnosticAssessments, context, recommendations);
   const observed = assessments.map((assessment) => statement("observed", assessment));
   const inferences: EvidenceStatement[] = state === "INSUFFICIENT_EVIDENCE" ? [] : [{ id: `inference:${state.toLowerCase()}`, text: ({ DESTINATION_MISSING: "The destination is absent; source verification is required before attributing the path.", DESTINATION_MALFORMED: "The destination waveform is outside registered bounds; source timing must be separated from path timing.", SOURCE_MALFORMED: "The source does not match the registered stimulus, so a downstream repair claim is not supported.", PATH_OPEN_SUPPORTED: "A valid source and absent destination support an open signal path under the tested conditions.", SIGNAL_PATH_FAULT_SUPPORTED: "A valid source and malformed destination support a bounded signal-path fault diagnosis.", CONFLICTING_EVIDENCE: "Accepted captures conflict; repeat synchronized capture or stop inconclusive.", NORMAL: "The tested source and destination behavior agrees with configured bounds.", SENSOR_ANOMALY: "The optional sensor profile returned an out-of-bounds or invalid result." } as Record<Exclude<EvidenceState, "INSUFFICIENT_EVIDENCE">, string>)[state as Exclude<EvidenceState, "INSUFFICIENT_EVIDENCE">], observationIds: diagnosticAssessments.map((entry) => entry.observationId), limitations: targetById(context, targetId)?.limitations ?? [] }];
   return {
-    state, confidence, assessments, observed, inferences, hypotheses: context.profile.kind === "loopback" ? hypothesesFor(state) : [], recommendations,
+    state, confidence, assessments, observed, inferences, hypotheses: context.profile.kind === "loopback" ? hypothesesFor(state) : [], recommendations, conclusion,
     verification: { status, requiredConsecutivePasses: required, consecutivePasses, observationIds: verificationObservations.map((entry) => entry.id), summary: status === "PASSED" ? "Two consecutive physical verification runs passed." : status === "SIMULATED_PASS" ? "Two simulated runs passed; physical confirmation is not available." : status === "FAILED" ? "Repeated verification did not restore the registered behavior." : interventionDeclared ? `Verification requires ${required} consecutive passing physical runs.` : "No repair claim has entered verification." },
     limitations: [...(targetById(context, targetId)?.limitations ?? []), context.procedures.reference?.kind === "project_calibration" ? `Project calibration reference: ${context.procedures.reference.procedureId}.` : "No independent reference exists; results are baseline characterization."],
   };
