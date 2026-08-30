@@ -36,8 +36,14 @@ function renderStatements(selector, entries, empty) { $(selector).innerHTML = en
 function drawGraph(session) {
   const canvas = $("#state-graph"); const ratio = window.devicePixelRatio || 1; const width = Math.max(canvas.clientWidth, 320); const height = Math.max(canvas.clientHeight, 190); canvas.width = width * ratio; canvas.height = height * ratio; const context = canvas.getContext("2d"); context.scale(ratio, ratio); context.clearRect(0, 0, width, height);
   const latest = [...session.observations].reverse().find((entry) => entry.series?.length); const series = latest?.series?.[0]; $("#graph-mode").textContent = latest ? `${latest.source} · ${latest.planId}` : "Waiting";
-  if (!series?.values?.length) { $("#graph-empty").hidden = false; return; } $("#graph-empty").hidden = true;
-  const css = getComputedStyle(document.documentElement); context.strokeStyle = css.getPropertyValue("--accent").trim(); context.lineWidth = 2.2; context.beginPath(); series.values.forEach((value, index) => { const x = index / Math.max(series.values.length - 1, 1) * width; const y = height - 28 - value * (height - 56); index ? context.lineTo(x, y) : context.moveTo(x, y); }); context.stroke();
+  if (!series?.values?.length) {
+    const latestMeasurement = latest?.measurements?.find((entry) => typeof entry.value === "number");
+    if (!latestMeasurement) { $("#graph-empty").hidden = false; return; }
+    series = { values: [Number(latestMeasurement.value)], channel: latestMeasurement.channel, unit: latestMeasurement.unit };
+    $("#graph-mode").textContent = `${latest.source} · ${latest.planId} · ${latestMeasurement.channel}`;
+  }
+  $("#graph-empty").hidden = true;
+  const css = getComputedStyle(document.documentElement); context.strokeStyle = css.getPropertyValue("--accent").trim(); context.lineWidth = 2.2; const numeric = series.values.map(Number); const low = Math.min(...numeric); const high = Math.max(...numeric); const span = high - low || Math.max(Math.abs(high), 1); context.beginPath(); numeric.forEach((value, index) => { const x = index / Math.max(numeric.length - 1, 1) * width; const y = height - 28 - ((value - low) / span) * (height - 56); index ? context.lineTo(x, y) : context.moveTo(x, y); }); context.stroke();
 }
 
 function render(session) {
