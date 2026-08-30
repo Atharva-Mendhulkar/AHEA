@@ -71,7 +71,7 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-AHEA is an open-source, ESP32-S3-centered framework for evidence-driven diagnostics of physical computing systems. An agent selects from backend-offered semantic experiments, while reviewed firmware and a safety gateway retain control over pins, timing, electrical limits, and cleanup. Deterministic rules—not the language model—decide what the resulting measurements support.
+AHEA is an open-source, ESP32-S3-centered framework for evidence-driven diagnostics of physical computing systems. An agent selects from backend-offered semantic experiments, while reviewed firmware and a safety gateway retain control over pins, timing, electrical limits, and cleanup. Deterministic rules, not the language model, decide what the resulting measurements support.
 
 The MVP proves this architecture using a protected waveform loopback with separate source and destination observers. HC-SR04, MPU6050, and DHT11 profiles demonstrate how the same capability, provenance, evidence, and lifecycle interfaces extend to optional sensors.
 
@@ -111,7 +111,7 @@ GPIO4 ── 1 kΩ ── source ── removable jumper ── destination ─�
                   GPIO5                          GPIO6
 ```
 
-The registered initial plan generates a 1 kHz, 50% duty-cycle waveform for 500 ms. Because the same ESP32-S3 generates and observes it, the result establishes internal timing consistency—not independent calibration.
+The registered initial plan generates a 1 kHz, 50% duty-cycle waveform for 500 ms. Because the same ESP32-S3 generates and observes it, the result establishes internal timing consistency, not independent calibration.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -178,7 +178,7 @@ Simulation is the default and requires no attached hardware. It exercises the fu
 
 Choose the loopback or an optional sensor profile, select a named simulation fixture, and create a session. AHEA starts with the profile's registered first observation and changes the eligible next experiment as evidence arrives.
 
-Optional sensor simulations are operator-guided. The dashboard presents the required stimulus—such as holding or moving an MPU6050, positioning an HC-SR04 obstacle, or stabilizing a DHT11 environment—before advancing the deterministic capture. All resulting traces and reports remain explicitly labeled as simulated and can never produce physical `CONFIRMED` status.
+Optional sensor simulations are operator-guided. The dashboard presents the required stimulus, such as holding or moving an MPU6050, positioning an HC-SR04 obstacle, or stabilizing a DHT11 environment, before advancing the deterministic capture. All resulting traces and reports remain explicitly labeled as simulated and can never produce physical `CONFIRMED` status.
 
 ### Physical Hardware
 
