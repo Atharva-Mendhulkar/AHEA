@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "esp32s3-loopback-physics",
+  "version": "1.0.0",
+  "profileKind": "loopback",
+  "parameters": {
+    "frequencyJitterFraction": 0.0015,
+    "dutyJitterPercent": 0.35
+  },
+  "calibration": {
+    "status": "model_only",
+    "captureCount": 0,
+    "sessionCount": 0
+  }
+}

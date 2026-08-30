@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "esp32s3-hc-sr04-physics",
+  "version": "1.0.0",
+  "profileKind": "hc_sr04",
+  "parameters": {
+    "distanceNoiseCm": 0.22,
+    "timeoutRate": 0.005
+  },
+  "calibration": {
+    "status": "model_only",
+    "captureCount": 0,
+    "sessionCount": 0
+  }
+}

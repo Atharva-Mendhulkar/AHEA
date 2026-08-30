@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "esp32s3-mpu6050-physics",
+  "version": "1.0.0",
+  "profileKind": "mpu6050",
+  "parameters": {
+    "accelNoiseG": 0.012,
+    "gyroNoiseDps": 0.18,
+    "gyroBiasDps": 0.32
+  },
+  "calibration": {
+    "status": "model_only",
+    "captureCount": 0,
+    "sessionCount": 0
+  }
+}

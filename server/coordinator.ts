@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import type { DiagnosisReport, DiagnosisSession, ExperimentDefinition, Observation, ProjectContext, SessionMode, SimulationFixture, TimelineEvent } from "../shared/domain.js";
+import type { DiagnosisReport, DiagnosisSession, ExperimentDefinition, Observation, ProjectContext, SessionMode, SimulationFixture, SimulationRequest, TimelineEvent } from "../shared/domain.js";
 import { targetById, terminalLifecycleStates } from "../shared/domain.js";
 import { projectContextSchema } from "../shared/schemas.js";
 import { fallbackDecision, toDecisionRecord, type DecisionClient } from "./agent.js";
@@ -12,8 +12,9 @@ import { deriveEvidence } from "./evidence.js";
 import { validateExperiment } from "./gateway.js";
 import { buildEligibleExperiments, buildMonitoringExperiment, guidanceForTarget, registryMatchesReviewedPlans } from "./modules.js";
 import { JsonStore } from "./store.js";
+import { legacyFixtureRequest, resolveSimulation, simulationCatalog, type SimulationPaths } from "./simulation/catalog.js";
 
-export interface CoordinatorOptions { store: JsonStore; agent: DecisionClient; serialPath?: string; physicalEnabled: boolean; now?: () => Date }
+export interface CoordinatorOptions extends SimulationPaths { store: JsonStore; agent: DecisionClient; serialPath?: string; physicalEnabled: boolean; now?: () => Date }
 export class DomainError extends Error { constructor(message: string, readonly status = 400) { super(message); } }
 
 export class Coordinator {
@@ -24,7 +25,9 @@ export class Coordinator {
   private readonly now: () => Date;
   constructor(private readonly options: CoordinatorOptions) { this.now = options.now ?? (() => new Date()); }
 
-  async createSession(mode: SessionMode, fixture?: SimulationFixture, inputContext: ProjectContext = defaultProjectContext, requestedTarget?: string): Promise<DiagnosisSession> {
+  getSimulationCatalog() { return simulationCatalog(this.options); }
+
+  async createSession(mode: SessionMode, fixture?: SimulationFixture, inputContext: ProjectContext = defaultProjectContext, requestedTarget?: string, requestedSimulation?: SimulationRequest): Promise<DiagnosisSession> {
     const context = projectContextSchema.parse(inputContext);
     if (mode === "physical" && context.hardwareProfileId.includes("safe-disabled")) throw new DomainError("Physical sessions require an explicitly reviewed project and firmware profile.", 409);
     const targetId = requestedTarget ?? context.primaryTargetId;
@@ -35,7 +38,10 @@ export class Coordinator {
     if (mode === "simulation" && context.profile.kind !== "loopback" && selectedFixture.startsWith("loopback_")) throw new DomainError("Loopback fixtures cannot be used with an optional sensor profile.");
     if (mode === "physical" && ((target.type === "hc_sr04" && !target.echoProtection.reviewed) || (target.type === "mpu6050" && !target.i2c.reviewed) || (target.type === "dht11" && !target.dataInterface.reviewed))) throw new DomainError("Physical optional profiles require their electrical interface to be explicitly reviewed.", 409);
     const id = randomUUID();
-    const adapter: HardwareAdapter = mode === "simulation" ? new SimulatorAdapter(selectedFixture, context) : new SerialAdapter(this.options.serialPath ?? "", this.options.physicalEnabled, context);
+    let simulation;
+    if (mode === "simulation") try { simulation = resolveSimulation(requestedSimulation ?? legacyFixtureRequest(selectedFixture, context.profile.kind), context.profile.kind, this.options); }
+    catch (error) { throw new DomainError(error instanceof Error ? error.message : "Simulation specification is invalid.", 409); }
+    const adapter: HardwareAdapter = mode === "simulation" ? new SimulatorAdapter(simulation!, context, this.options) : new SerialAdapter(this.options.serialPath ?? "", this.options.physicalEnabled, context);
     let hardware;
     try { hardware = await adapter.preflight(); }
     catch (error) { await adapter.close(); throw new DomainError(error instanceof Error ? error.message : "Hardware preflight failed.", 503); }
@@ -46,13 +52,13 @@ export class Coordinator {
     catch (error) { await adapter.close(); throw new DomainError(error instanceof Error ? error.message : "Hardware session arming failed.", 503); }
     const createdAt = this.now().toISOString(); const digest = projectContextDigest(context);
     const session: DiagnosisSession = {
-      schemaVersion: 3, id, mode, fixture: mode === "simulation" ? selectedFixture : undefined, targetId, projectContext: context, projectContextDigest: digest,
+      schemaVersion: 3, id, mode, fixture: mode === "simulation" && !requestedSimulation ? selectedFixture : undefined, simulation, targetId, projectContext: context, projectContextDigest: digest,
       createdAt, updatedAt: createdAt, version: 0, lifecycle: "READY", phase: "diagnostic", agentState: "IDLE", hardware, observations: [], decisions: [],
       experimentsExecuted: 0, monitoringReads: 0, verificationRuns: 0, consecutiveVerificationPasses: 0,
       evidence: deriveEvidence([], context, targetId, false, mode), timeline: [], fallbackUsed: false,
     };
     this.sessions.set(id, session); this.adapters.set(id, adapter);
-    await this.addEvent(session, "session.created", `${mode === "simulation" ? "Simulation" : "Physical"} ${context.profile.kind} session created.`, { fixture: selectedFixture, targetId, projectContextDigest: digest, registryDigest: hardware.registry.digest });
+    await this.addEvent(session, "session.created", `${mode === "simulation" ? "Simulation" : "Physical"} ${context.profile.kind} session created.`, { fixture: session.fixture, simulation, targetId, projectContextDigest: digest, registryDigest: hardware.registry.digest });
     await this.commit(session); return session;
   }
 
@@ -197,9 +203,11 @@ export class Coordinator {
     const bindingsMatch = Boolean(plan) && observation.bindingIds.length === plan!.bindingIds.length && plan!.bindingIds.every((binding) => observation.bindingIds.includes(binding));
     const nestedTargetsMatch = [...observation.measurements, ...observation.series, ...observation.targetHealth].every((entry) => entry.targetId === experiment.targetId);
     const declaredMeasurementsMatch = Boolean(plan) && observation.measurements.length === plan!.measurements.length && plan!.measurements.every((descriptor) => observation.measurements.some((entry) => entry.channel === descriptor.channel && entry.unit === descriptor.unit));
+    const declaredSeriesMatch = Boolean(plan) && observation.series.every((entry) => plan!.series.some((descriptor) => descriptor.channel === entry.channel && descriptor.unit === entry.unit && descriptor.sampleIntervalUs === entry.sampleIntervalUs && entry.values.length <= descriptor.maximumSamples));
     const previousSequence = session.observations.at(-1)?.sequenceNumber ?? -1;
     const capturedAtValid = Number.isFinite(Date.parse(observation.capturedAt));
-    if (!plan || !target || observation.sessionId !== session.id || observation.source !== session.mode || observation.adapter !== expectedAdapter || observation.projectContextDigest !== session.projectContextDigest || observation.registryDigest !== session.hardware.registry.digest || observation.hardwareProfileId !== session.hardware.profileId || observation.firmwareVersion !== session.hardware.firmwareVersion || observation.boardIdentity !== session.hardware.boardIdentity || observation.experimentId !== experiment.id || observation.targetId !== experiment.targetId || observation.targetType !== target.type || observation.command !== experiment.command || observation.planId !== experiment.planId || observation.phase !== experiment.phase || observation.sequenceNumber <= previousSequence || observation.monotonicEndedMs < observation.monotonicStartedMs || !capturedAtValid || !bindingsMatch || !nestedTargetsMatch || !declaredMeasurementsMatch || observation.targetHealth.length === 0 || (experiment.requiresSetupConfirmation && !observation.setupDeclaration?.trim()) || !observation.gatewayValidation.accepted) throw new DomainError("Observation provenance does not match the immutable session, registry, plan, target, mode, or measurement schema.", 409);
+    const simulationMatches = session.mode === "physical" ? observation.simulation === undefined : Boolean(session.simulation && observation.simulation && JSON.stringify(session.simulation) === JSON.stringify(observation.simulation));
+    if (!plan || !target || !simulationMatches || observation.sessionId !== session.id || observation.source !== session.mode || observation.adapter !== expectedAdapter || observation.projectContextDigest !== session.projectContextDigest || observation.registryDigest !== session.hardware.registry.digest || observation.hardwareProfileId !== session.hardware.profileId || observation.firmwareVersion !== session.hardware.firmwareVersion || observation.boardIdentity !== session.hardware.boardIdentity || observation.experimentId !== experiment.id || observation.targetId !== experiment.targetId || observation.targetType !== target.type || observation.command !== experiment.command || observation.planId !== experiment.planId || observation.phase !== experiment.phase || observation.sequenceNumber <= previousSequence || observation.monotonicEndedMs < observation.monotonicStartedMs || !capturedAtValid || !bindingsMatch || !nestedTargetsMatch || !declaredMeasurementsMatch || !declaredSeriesMatch || observation.targetHealth.length === 0 || (experiment.requiresSetupConfirmation && !observation.setupDeclaration?.trim()) || !observation.gatewayValidation.accepted) throw new DomainError("Observation provenance does not match the immutable session, registry, plan, target, mode, or measurement schema.", 409);
   }
   private async addEvent(session: DiagnosisSession, type: string, summary: string, data?: Record<string, unknown>): Promise<void> { const event: TimelineEvent = { id: randomUUID(), sessionId: session.id, at: this.now().toISOString(), type, summary, data }; session.timeline.push(event); await this.options.store.appendEvent(event); this.events.emit(session.id, event); }
   private async commit(session: DiagnosisSession): Promise<void> { session.version += 1; session.updatedAt = this.now().toISOString(); if (session.pendingDecision) session.pendingDecision.sessionVersion = session.version; await this.options.store.saveSession(session); }

@@ -1,4 +1,9 @@
 {
+  "schemaVersion": 2,
+  "engine": "generated",
+  "modelDirectory": "config/simulation-models",
+  "captureDirectory": "data/simulation-captures",
+  "legacyFixtureCompatibility": true,
   "defaultFixture": "loopback_open",
   "fixtures": ["loopback_intact", "loopback_open", "loopback_distorted", "loopback_stimulus_fault", "loopback_conflicting", "loopback_verification_failure", "sensor_normal", "sensor_fault"]
 }

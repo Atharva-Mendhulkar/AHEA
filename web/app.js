@@ -1,10 +1,8 @@
 const $ = (selector) => document.querySelector(selector);
 const state = {
-  contexts: {}, session: null, events: null,
+  contexts: {}, simulationCatalog: null, session: null, events: null,
   automation: { timer: null, ticker: null, decisionId: null, deadline: 0, paused: false, executing: false },
 };
-const loopbackFixtures = ["loopback_open", "loopback_intact", "loopback_distorted", "loopback_stimulus_fault", "loopback_conflicting", "loopback_verification_failure"];
-const sensorFixtures = ["sensor_normal", "sensor_fault"];
 const simulationActionWindowMs = 4000;
 let graphFrame;
 
@@ -24,9 +22,22 @@ function setMetric(selector, value) {
 function updateProfile() {
   const kind = $("#profile").value; const context = state.contexts[kind]; if (!context) return;
   $("#project-context").value = JSON.stringify(context, null, 2);
-  const fixtures = kind === "loopback" ? loopbackFixtures : sensorFixtures;
-  $("#fixture").innerHTML = fixtures.map((value) => `<option value="${value}">${formatState(value)}</option>`).join("");
+  const scenario = state.simulationCatalog?.scenarios?.[kind];
+  $("#simulation-condition").innerHTML = (scenario?.conditions || ["normal"]).map((value) => `<option value="${value}">${formatState(value)}</option>`).join("");
+  const captures = state.simulationCatalog?.captures?.filter((entry) => entry.profileKind === kind) || [];
+  $("#replay-capture").innerHTML = captures.length ? captures.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.id)} · ${entry.plans.length} plans</option>`).join("") : `<option value="">No imported captures</option>`;
+  updateScenarioControl();
   $("#problem").value = kind === "loopback" ? "The destination waveform is missing. Determine whether the protected path is open." : `Characterize the ${context.project.name} profile and report whether the bounded evidence is normal or inconclusive.`;
+}
+
+function updateScenarioControl() {
+  const controls = state.simulationCatalog?.scenarios?.[$("#profile").value]?.controls || [];
+  $("#scenario-controls").innerHTML = controls.map((control) => `<label class="field">${escapeHtml(control.label)}<input data-scenario-key="${escapeHtml(control.key)}" type="number" min="${control.minimum}" max="${control.maximum}" step="${control.step}" value="${control.defaultValue}"><small>${control.minimum} to ${control.maximum}</small></label>`).join("");
+}
+
+function updateSimulationEngine() {
+  const simulation = $("#mode").value === "simulation"; const replay = $("#simulation-engine").value === "replay";
+  $("#simulation-fields").classList.toggle("hidden", !simulation); $("#generated-fields").classList.toggle("hidden", replay); $("#seed-field").classList.toggle("hidden", replay); $("#replay-field").classList.toggle("hidden", !replay);
 }
 
 function copyFor(session) {
@@ -44,7 +55,7 @@ function renderStatements(selector, entries, empty) { $(selector).innerHTML = en
 
 function drawGraph(session) {
   cancelAnimationFrame(graphFrame); const canvas = $("#state-graph"); const ratio = window.devicePixelRatio || 1; const width = Math.max(canvas.clientWidth, 320); const height = Math.max(canvas.clientHeight, 190); canvas.width = width * ratio; canvas.height = height * ratio; const context = canvas.getContext("2d"); context.scale(ratio, ratio);
-  const latest = [...session.observations].reverse().find((entry) => entry.series?.some((item) => item.values?.length)); const series = latest?.series?.filter((item) => item.values?.length) || []; $("#graph-mode").textContent = latest ? `${latest.source} · ${latest.planId}` : "Waiting";
+  const latest = [...session.observations].reverse().find((entry) => entry.series?.some((item) => item.values?.length)); const series = latest?.series?.filter((item) => item.values?.length) || []; $("#graph-mode").textContent = latest ? `${latest.source}${latest.simulation ? `/${latest.simulation.engine}` : ""} · ${latest.planId}` : "Waiting";
   if (!series.length) { $("#graph-empty").hidden = false; $("#graph-legend").innerHTML = ""; context.clearRect(0, 0, width, height); return; } $("#graph-empty").hidden = true;
   const css = getComputedStyle(document.documentElement); const colors = ["--accent", "--success", "--warning", "--danger"].map((name) => css.getPropertyValue(name).trim());
   $("#graph-legend").innerHTML = series.map((item, index) => `<span><i class="legend-line" style="background:${escapeHtml(colors[index % colors.length])}"></i>${escapeHtml(formatState(item.channel))} · ${escapeHtml(item.values.at(-1))} ${escapeHtml(item.unit)}</span>`).join("");
@@ -118,7 +129,7 @@ function render(session) {
   $("#recommendation").innerHTML = recommendation ? `<article class="recommendation-card"><header class="recommendation-header"><p class="eyebrow">RECOMMENDATION</p><span class="badge" data-tone="warning">${recommendation.confidence}</span></header><div class="recommendation-change"><h3>${escapeHtml(recommendation.action)}</h3><p><strong>Evidence:</strong> ${escapeHtml(recommendation.basis)}</p></div><div class="recommendation-details"><p><span>Expected effect</span>${escapeHtml(recommendation.expectedEffect)}</p><p><span>Verification</span><b title="${escapeHtml(recommendation.verificationPlanId)}">${escapeHtml(recommendation.verificationPlanId)}</b></p><p><span>Safety</span>${escapeHtml(recommendation.safetyConstraints.join(" "))}</p></div></article>` : "";
   $("#recommendation-region").classList.toggle("hidden", !recommendation && session.lifecycle !== "DIAGNOSIS_READY");
   $("#context-title").textContent = session.projectContext.profile.moduleId; $("#context-facts").innerHTML = [["Target", session.targetId], ["Profile", session.projectContext.profile.kind], ["Context", session.projectContextDigest.slice(0, 12)], ["Reference", session.projectContext.procedures.reference?.kind || "none"]].map(([key, value]) => `<div><span>${key}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
-  $("#hardware-title").textContent = session.hardware.boardIdentity; $("#hardware-health").classList.toggle("online", session.hardware.connected); $("#hardware-facts").innerHTML = [["Firmware", session.hardware.firmwareVersion], ["Protocol", session.hardware.protocolVersion], ["Profile", session.hardware.profileId], ["Mode", session.mode]].map(([key, value]) => `<div><span>${key}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+  $("#hardware-title").textContent = session.hardware.boardIdentity; $("#hardware-health").classList.toggle("online", session.hardware.connected); $("#hardware-facts").innerHTML = [["Firmware", session.hardware.firmwareVersion], ["Protocol", session.hardware.protocolVersion], ["Profile", session.hardware.profileId], ["Mode", session.mode], ...(session.simulation ? [["Engine", session.simulation.engine], ["Seed", session.simulation.seed], ["Calibration", formatState(session.simulation.calibration.status)]] : [])].map(([key, value]) => `<div><span>${key}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
   $("#plan-list").innerHTML = session.hardware.registry.plans.map((entry) => `<div class="plan-row"><span>${escapeHtml(entry.label)}</span><code>${escapeHtml(entry.id)}</code></div>`).join("");
   $("#event-count").textContent = session.timeline.length; $("#timeline").innerHTML = [...session.timeline].reverse().map((event) => `<div class="timeline-item"><time>${new Date(event.at).toLocaleTimeString()}</time><div><strong>${escapeHtml(event.type.replaceAll(".", " "))}</strong><p>${escapeHtml(event.summary)}</p></div></div>`).join("");
   const pendingPrompt = session.pendingDecision?.experiment.operatorPrompt || "Confirm the declared setup before capture."; $("#operator-prompt").textContent = pendingPrompt; $("#confirmation-label").textContent = session.pendingDecision?.experiment.confirmationLabel || "Fixture matches the declared setup"; $("#simulation-prompt-note").hidden = session.mode !== "simulation";
@@ -130,7 +141,9 @@ async function createSession(event) {
   event.preventDefault();
   try {
     clearAutomationTimers(); state.automation = { timer: null, ticker: null, decisionId: null, deadline: 0, paused: false, executing: false };
-    const context = JSON.parse($("#project-context").value); const session = await api("/api/sessions", { method: "POST", body: JSON.stringify({ mode: $("#mode").value, fixture: $("#mode").value === "simulation" ? $("#fixture").value : undefined, projectContext: context }) }); let submitted = await api(`/api/sessions/${session.id}/problem`, { method: "POST", body: JSON.stringify({ problem: $("#problem").value }) });
+    const context = JSON.parse($("#project-context").value); const mode = $("#mode").value; let simulation;
+    if (mode === "simulation") { const engine = $("#simulation-engine").value; const controls = Object.fromEntries([...document.querySelectorAll("[data-scenario-key]")].map((input) => [input.dataset.scenarioKey, Number(input.value)])); simulation = engine === "replay" ? { engine, replayCaptureId: $("#replay-capture").value } : { engine, seed: $("#simulation-seed").value || undefined, scenario: { condition: $("#simulation-condition").value, ...controls } }; }
+    const session = await api("/api/sessions", { method: "POST", body: JSON.stringify({ mode, simulation, projectContext: context }) }); let submitted = await api(`/api/sessions/${session.id}/problem`, { method: "POST", body: JSON.stringify({ problem: $("#problem").value }) });
     if (submitted.mode === "simulation") submitted = await api(`/api/sessions/${submitted.id}/investigation/start`, { method: "POST", body: "{}" });
     render(submitted); $("#setup-confirmed").checked = false; connectEvents(submitted.id);
   } catch (error) { toast(error.message); }
@@ -155,5 +168,5 @@ async function downloadReport() { try { const report = await api(`/api/sessions/
 function connectEvents(id) { state.events?.close(); state.events = new EventSource(`/api/sessions/${id}/events`); state.events.addEventListener("snapshot", (event) => render(JSON.parse(event.data))); state.events.addEventListener("timeline", async () => { try { render(await api(`/api/sessions/${id}`)); } catch {} }); }
 function toggleTheme() { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = next; document.documentElement.classList.toggle("dark", next === "dark"); localStorage.setItem("ahea-theme", next); if (state.session) drawGraph(state.session); }
 
-$("#start-form").addEventListener("submit", createSession); $("#profile").addEventListener("change", updateProfile); $("#mode").addEventListener("change", () => $("#fixture-field").classList.toggle("hidden", $("#mode").value !== "simulation")); $("#start-investigation").addEventListener("click", startInvestigation); $("#execute").addEventListener("click", () => executeSelected()); $("#auto-run-toggle").addEventListener("click", toggleSimulationAutomation); $("#declare").addEventListener("click", declareIntervention); $("#estop").addEventListener("click", stopSession); $("#download-report").addEventListener("click", downloadReport); $("#theme-toggle").addEventListener("click", toggleTheme); $("#brand-home").addEventListener("click", () => { clearAutomationTimers(); state.events?.close(); }); window.addEventListener("resize", () => state.session && drawGraph(state.session));
-api("/api/project-contexts").then((contexts) => { state.contexts = contexts; updateProfile(); }).catch((error) => toast(error.message));
+$("#start-form").addEventListener("submit", createSession); $("#profile").addEventListener("change", updateProfile); $("#mode").addEventListener("change", updateSimulationEngine); $("#simulation-engine").addEventListener("change", updateSimulationEngine); $("#simulation-condition").addEventListener("change", updateScenarioControl); $("#start-investigation").addEventListener("click", startInvestigation); $("#execute").addEventListener("click", () => executeSelected()); $("#auto-run-toggle").addEventListener("click", toggleSimulationAutomation); $("#declare").addEventListener("click", declareIntervention); $("#estop").addEventListener("click", stopSession); $("#download-report").addEventListener("click", downloadReport); $("#theme-toggle").addEventListener("click", toggleTheme); $("#brand-home").addEventListener("click", () => { clearAutomationTimers(); state.events?.close(); }); window.addEventListener("resize", () => state.session && drawGraph(state.session));
+Promise.all([api("/api/project-contexts"), api("/api/simulation/catalog")]).then(([contexts, catalog]) => { state.contexts = contexts; state.simulationCatalog = catalog; updateProfile(); updateSimulationEngine(); }).catch((error) => toast(error.message));

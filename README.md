@@ -176,25 +176,110 @@ Simulation is the default and requires no attached hardware. It exercises the fu
 
 ### Simulation
 
-Choose the loopback or an optional sensor profile, select a named simulation fixture, and create a session. AHEA starts with the profile's registered first observation and changes the eligible next experiment as evidence arrives.
+Simulation is the safest way to learn the complete diagnostic lifecycle. It uses seeded, profile-specific physical models or exact replay of an imported physical report. It preserves the same capability registry and evidence boundaries as physical mode and never makes a physical claim.
 
-Optional sensor simulations are operator-guided. The dashboard presents the required stimulus, such as holding or moving an MPU6050, positioning an HC-SR04 obstacle, or stabilizing a DHT11 environment, before advancing the deterministic capture. All resulting traces and reports remain explicitly labeled as simulated and can never produce physical `CONFIRMED` status.
+1. Run the software readiness checks and start the server:
+
+   ```sh
+   npm run check
+   npm run dev
+   ```
+
+2. Open [http://localhost:3000](http://localhost:3000).
+3. Select a profile:
+   * **Core loopback** exercises adaptive path diagnosis, intervention, and verification.
+   * **HC-SR04**, **MPU6050**, and **DHT11** exercise each sensor's registered characterization plans.
+4. Select **Simulation** as the evidence source.
+5. Select **Generated model** or **Physical capture replay**. Generated mode accepts a reproducible session seed and bounded semantic controls for the selected profile. Replay lists only locally imported physical reports for that profile.
+6. Select a generated condition such as normal, open path, noisy, timeout, or sensor fault. Optional controls set distance, motion amplitude, temperature, or humidity within API-enforced bounds.
+7. Describe the reported problem and select **Create evidence session**. The backend freezes the project context, resolves the simulation specification, validates the simulator registry, and records the model, scenario, calibration, registry, and context digests.
+8. Let automatic capture run, or pause it to inspect each operator prompt. The simulator waits four seconds before each bounded plan. Optional sensor prompts describe a scripted stimulus; no real motion, distance, temperature, or humidity is sensed.
+9. Review each observation, generated or replayed series, hypothesis, confidence label, provenance, and timeline event. AHEA chooses the next registered experiment from the evidence state:
+   * Loopback starts at the destination, checks the source when needed, compares endpoints, and runs a bounded repeat when evidence conflicts.
+   * Sensor profiles run identity or response, baseline, and consistency or motion plans in their registered order.
+10. Follow the terminal path:
+   * Normal bounded behavior ends at `CONCLUDED_NORMAL`.
+   * Unsupported or conflicting evidence ends at `INCONCLUSIVE`.
+   * A supported loopback fault reaches `DIAGNOSIS_READY` and exposes one evidence-linked intervention.
+11. For `DIAGNOSIS_READY`, review the recommendation, enter the simulated human change, confirm the safety procedure, and declare the intervention. AHEA then runs the registered verification plan twice.
+12. Two simulated passes produce `SIMULATED_PASS` and an `INCONCLUSIVE` lifecycle because simulation cannot produce physical `CONFIRMED` status. A failed pass produces `FAILED_VERIFICATION`.
+13. Select **Download report** to retain the JSON report with observations, provenance, decisions, limitations, intervention, verification counters, and timing.
+
+See [the simulation and calibration guide](docs/simulation.md) for capture import, replay, model calibration, and validation.
+
+Use **Stop** at any point to abort the active operation, apply registered cleanup, and end the session as `ESTOPPED`. Monitoring samples, when available, are provenance-tagged but excluded from diagnostic evidence.
 
 ### Physical Hardware
 
-Physical mode intentionally ships disabled. Do not enable or flash a physical profile until the exact board, 3.3 V behavior, protection resistors, common ground, pin bindings, and output-low behavior have been reviewed.
+Physical mode is fail-closed. In the current repository, only the dedicated MPU6050 environment is enabled with a reviewed physical profile. The default loopback build, HC-SR04 profile, and DHT11 profile remain safe-disabled and must not be used for physical sessions until their electrical interfaces and matching profile identities are reviewed.
 
-The detected development target is configured as an ESP32-S3 N16R8 with 16 MB flash, 8 MB OPI PSRAM, and CP2102 UART transport. Continue with the [physical bring-up guide](docs/hardware-bringup.md) and [acceptance-readiness checklist](docs/physical-readiness.md).
+1. Complete the software and firmware readiness checks:
 
-When a reviewed profile is available, the backend is started with an explicit physical gate and serial path:
+   ```sh
+   npm run check
+   npm run firmware:test
+   npm run firmware:build
+   npm run firmware:build:mpu6050
+   ```
 
-```sh
-AHEA_PHYSICAL_ENABLED=true \
-AHEA_SERIAL_PATH=/dev/cu.usbserial-0001 \
-npm run dev
-```
+2. Disconnect power before wiring the MPU6050. Use this exact reviewed mapping:
 
-The backend still refuses the session unless the firmware identities, registry digest, registered plans, bindings, fixed parameters, and cleanup declarations match the immutable project context.
+   | MPU6050 | ESP32-S3 |
+   |---|---|
+   | VCC | 3.3 V |
+   | GND | GND |
+   | SDA | GPIO14 |
+   | SCL | GPIO13 |
+   | AD0 | GND for address `0x68` |
+   | INT, XDA, XCL | Not connected |
+
+   Confirm that all I2C pull-ups terminate at 3.3 V. The module power LED proves only that power is present; it does not prove I2C communication.
+
+3. Connect the ESP32-S3 through its CP2102 USB serial interface and identify the port. The following commands use the currently detected macOS path; substitute the actual port on another system:
+
+   ```sh
+   ls /dev/cu.usbserial-*
+   ```
+
+4. Flash the reviewed MPU6050 build:
+
+   ```sh
+   .venv/bin/pio run -d firmware \
+     -e esp32s3_mpu6050 \
+     -t upload \
+     --upload-port /dev/cu.usbserial-0001
+   ```
+
+5. Run the bounded identity smoke test:
+
+   ```sh
+   npm run firmware:smoke:mpu6050 -- /dev/cu.usbserial-0001
+   ```
+
+   Continue only when the handshake reports the expected board, protocol, reviewed profile, and registry digest, and the result contains `"identityValid": true` with an accepted operation and healthy target. If identity is false, power down and check 3.3 V, common ground, SDA and SCL orientation, GPIO14 and GPIO13 placement, AD0, and the `0x68` address before retrying.
+
+6. Start the backend with both physical gates:
+
+   ```sh
+   AHEA_PHYSICAL_ENABLED=true \
+   AHEA_SERIAL_PATH=/dev/cu.usbserial-0001 \
+   npm run dev
+   ```
+
+7. Open [http://localhost:3000](http://localhost:3000), select **MPU6050**, select **Physical**, describe the problem, and select **Create evidence session**.
+8. Session creation performs a physical preflight and arms the firmware. It rejects a disabled profile, latched emergency stop, unsafe cleanup state, protocol mismatch, board or profile mismatch, stale registry digest, altered plan, binding mismatch, or measurement-schema mismatch.
+9. Select **Start investigation**. Physical mode never executes automatically.
+10. Complete and confirm every displayed operator action before selecting **Action complete, capture data**:
+    * Identity: leave the powered I2C wiring unchanged while `WHO_AM_I` is checked.
+    * Stationary baseline: place the MPU6050 on a stable surface and do not move it during capture.
+    * Motion and axes: perform only the displayed single-axis movement during the capture window.
+11. After each operation, confirm that the dashboard shows accepted execution, valid provenance, successful cleanup, healthy target status, and measurements within the declared bounds. AHEA then selects the next registered plan.
+12. The current MPU6050 workflow finishes as `CONCLUDED_NORMAL` when all three registered plans satisfy their bounds, or `INCONCLUSIVE` when identity, noise, drift, motion, axis response, operation health, or provenance cannot support a bounded normal conclusion. It does not claim orientation or calibration accuracy without an independent reference.
+13. Select **Download report** and retain the full physical record. Use **Stop** immediately if wiring changes, unexpected behavior, or an unsafe condition occurs.
+
+The full repair and confirmation lifecycle applies when a reviewed physical profile exposes an evidence-supported intervention and verification plan. The operator must power down, perform the recommended change, declare exactly what changed, confirm the safety procedure, and run the unchanged registered verification plan until it passes twice consecutively. Only two consecutive physical passes can produce `CONFIRMED`; the first failure produces `FAILED_VERIFICATION`. The current MPU6050 profile is characterization-only, and the repository's loopback profile must remain in simulation until a separate reviewed physical loopback profile is added.
+
+Every physical report should retain the firmware, board, protocol, and profile identities; registry and project-context digests; setup declarations; raw observations; gateway decisions; cleanup status; intervention declaration when applicable; verification results; and stated limitations. Continue with the [physical bring-up guide](docs/hardware-bringup.md) and [acceptance-readiness checklist](docs/physical-readiness.md) before enabling any additional hardware profile.
 
 ### Commands
 
@@ -208,6 +293,11 @@ The backend still refuses the session unless the firmware identities, registry d
 | `npm run test:openai` | Run the opt-in live selector test |
 | `npm run firmware:test` | Run native firmware safety tests |
 | `npm run firmware:build` | Build the safe-disabled ESP32-S3 firmware |
+| `npm run firmware:build:mpu6050` | Build the reviewed MPU6050 physical firmware |
+| `npm run firmware:smoke:mpu6050 -- <serial-port>` | Validate the physical handshake and MPU6050 identity |
+| `npm run simulation:capture:import -- <report> [capture-id]` | Import a validated physical report for local replay and calibration |
+| `npm run simulation:calibrate` | Derive compact model parameters when the corpus threshold is met |
+| `npm run simulation:validate-models` | Validate model files and calibration claims |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "esp32s3-dht11-physics",
+  "version": "1.0.0",
+  "profileKind": "dht11",
+  "parameters": {
+    "humidityNoisePercent": 0.3,
+    "frameFailureRate": 0.01,
+    "lagSamples": 2
+  },
+  "calibration": {
+    "status": "model_only",
+    "captureCount": 0,
+    "sessionCount": 0
+  }
+}

@@ -3,6 +3,8 @@ node_modules/
 dist/
 .env
 data/
+# Imported physical reports used for replay and calibration remain local.
+data/simulation-captures/
 .pio/
 firmware/.pio/
 coverage/

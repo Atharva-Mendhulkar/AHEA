@@ -10,6 +10,40 @@ export const simulationFixtures = [
 ] as const;
 export type SimulationFixture = (typeof simulationFixtures)[number];
 
+export const simulationEngines = ["generated", "replay"] as const;
+export type SimulationEngine = (typeof simulationEngines)[number];
+export const simulationConditions = ["normal", "open_path", "distorted_signal", "stimulus_fault", "conflicting", "verification_failure", "sensor_fault", "noisy", "timeout"] as const;
+export type SimulationCondition = (typeof simulationConditions)[number];
+export interface SimulationScenario {
+  condition: SimulationCondition;
+  distanceCm?: number;
+  temperatureC?: number;
+  humidityPercent?: number;
+  motionAmplitudeG?: number;
+}
+export interface SimulationRequest {
+  engine: SimulationEngine;
+  seed?: string;
+  scenario?: SimulationScenario;
+  replayCaptureId?: string;
+}
+export interface SimulationCalibration {
+  status: "model_only" | "esp32s3_calibrated";
+  digest: string;
+  captureCount: number;
+  sessionCount: number;
+}
+export interface SimulationSpecification {
+  engine: SimulationEngine;
+  seed: string;
+  scenario: SimulationScenario;
+  scenarioDigest: string;
+  model: { id: string; version: string; profileKind: ProfileKind };
+  calibration: SimulationCalibration;
+  replay?: { captureId: string; originDigest: string; sourceSessionId: string };
+}
+export interface SimulationProvenance extends SimulationSpecification {}
+
 export const hardwareCommands = ["execute_plan", "abort"] as const;
 export type HardwareCommand = (typeof hardwareCommands)[number];
 export const experimentTypes = [
@@ -62,11 +96,12 @@ export interface ProjectContext {
 }
 
 export interface MeasurementChannelDescriptor { channel: string; unit: string; description: string }
+export interface MeasurementSeriesDescriptor extends MeasurementChannelDescriptor { sampleIntervalUs: number; maximumSamples: number }
 export interface RegisteredPlan {
   id: string; capabilityId: string; type: ExperimentType; label: string; description: string; targetType: ProfileKind;
   command: HardwareCommand; bindingIds: string[]; phases: ExperimentPhase[]; budgetClass: BudgetClass;
   requiresSetupConfirmation: boolean; durationMs: number; fixedParameters: Record<string, number | string | boolean>;
-  measurements: MeasurementChannelDescriptor[]; limitations: string[]; cleanup: string;
+  measurements: MeasurementChannelDescriptor[]; series: MeasurementSeriesDescriptor[]; limitations: string[]; cleanup: string;
 }
 export interface CapabilityRegistry { schemaVersion: 1; registryVersion: string; digest: string; boardIdentity: string; hardwareProfileId: string; plans: RegisteredPlan[] }
 
@@ -87,6 +122,7 @@ export interface Observation {
   sequenceNumber: number; measurements: Measurement[]; series: MeasurementSeries[]; targetHealth: TargetHealth[]; operation: OperationResult;
   projectContextDigest: string; registryDigest: string; firmwareVersion: string; boardIdentity: string; hardwareProfileId: string; bindingIds: string[];
   setupDeclaration?: string; gatewayValidation: { accepted: boolean; checkedAt: string; reasons: string[] }; limitations: string[];
+  simulation?: SimulationProvenance;
 }
 
 export const evidenceStates = ["INSUFFICIENT_EVIDENCE", "DESTINATION_MISSING", "DESTINATION_MALFORMED", "SOURCE_MALFORMED", "PATH_OPEN_SUPPORTED", "SIGNAL_PATH_FAULT_SUPPORTED", "CONFLICTING_EVIDENCE", "NORMAL", "SENSOR_ANOMALY"] as const;
@@ -129,6 +165,7 @@ export interface HardwareStatus {
 }
 export interface DiagnosisSession {
   schemaVersion: 3; id: string; mode: SessionMode; fixture?: SimulationFixture; targetId: string; projectContext: ProjectContext; projectContextDigest: string;
+  simulation?: SimulationSpecification;
   createdAt: string; updatedAt: string; version: number; lifecycle: LifecycleState; phase: "diagnostic" | "verification"; agentState: AgentState;
   problem?: string; hardware: HardwareStatus; observations: Observation[]; decisions: DecisionRecord[]; pendingDecision?: PendingDecision; intervention?: Intervention;
   experimentsExecuted: number; monitoringReads: number; verificationRuns: number; consecutiveVerificationPasses: number; evidence: EvidenceView;

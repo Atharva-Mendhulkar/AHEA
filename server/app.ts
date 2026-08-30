@@ -21,7 +21,7 @@ export function createApp(coordinator: Coordinator) {
 
   app.post("/api/sessions", asyncRoute(async (request, response) => {
     const input = createSessionSchema.parse(request.body);
-    const session = await coordinator.createSession(input.mode, input.fixture, input.projectContext, input.targetId);
+    const session = await coordinator.createSession(input.mode, input.fixture, input.projectContext, input.targetId, input.simulation);
     response.status(201).json(session);
   }));
 
@@ -92,6 +92,7 @@ export function createApp(coordinator: Coordinator) {
 
   app.get("/api/project-context/default", (_request, response) => response.json(defaultProjectContext));
   app.get("/api/project-contexts", (_request, response) => response.json({ loopback: defaultProjectContext, ...optionalProjectContexts }));
+  app.get("/api/simulation/catalog", (_request, response) => response.json(coordinator.getSimulationCatalog()));
 
   app.use(express.static(path.resolve(here, "../web")));
   app.get("/circuit-setup", (_request, response) => {

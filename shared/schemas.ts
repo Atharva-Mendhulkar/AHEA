@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { evidenceStates, experimentTypes, hardwareCommands, lifecycleStates, profileKinds, sessionModes, simulationFixtures } from "./domain.js";
+import { evidenceStates, experimentTypes, hardwareCommands, lifecycleStates, profileKinds, sessionModes, simulationConditions, simulationEngines, simulationFixtures } from "./domain.js";
 
 const id = z.string().min(1).max(120);
 const range = z.tuple([z.number(), z.number()]).refine(([minimum, maximum]) => minimum <= maximum, "Range minimum must not exceed maximum.");
@@ -53,7 +53,24 @@ export const projectContextSchema = z.object({
   if (value.procedures.reference?.kind === "project_calibration" && !value.procedures.reference.procedureId) context.addIssue({ code: z.ZodIssueCode.custom, path: ["procedures", "reference", "procedureId"], message: "Project calibration requires a declared reference procedure ID." });
 });
 
-export const createSessionSchema = z.object({ mode: z.enum(sessionModes), fixture: z.enum(simulationFixtures).optional(), targetId: id.optional(), projectContext: projectContextSchema.optional() }).strict();
+export const simulationScenarioSchema = z.object({
+  condition: z.enum(simulationConditions),
+  distanceCm: z.number().min(2).max(400).optional(),
+  temperatureC: z.number().min(-20).max(80).optional(),
+  humidityPercent: z.number().min(0).max(100).optional(),
+  motionAmplitudeG: z.number().min(0).max(8).optional(),
+}).strict();
+export const simulationRequestSchema = z.object({
+  engine: z.enum(simulationEngines), seed: z.string().min(1).max(120).optional(), scenario: simulationScenarioSchema.optional(), replayCaptureId: id.optional(),
+}).strict().superRefine((value, context) => {
+  if (value.engine === "replay" && !value.replayCaptureId) context.addIssue({ code: z.ZodIssueCode.custom, path: ["replayCaptureId"], message: "Replay engine requires a capture ID." });
+  if (value.engine === "replay" && (value.seed || value.scenario)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["engine"], message: "Replay uses the captured values and cannot accept generated seed or scenario controls." });
+  if (value.engine === "generated" && value.replayCaptureId) context.addIssue({ code: z.ZodIssueCode.custom, path: ["replayCaptureId"], message: "Generated simulation cannot select a replay capture." });
+});
+export const createSessionSchema = z.object({ mode: z.enum(sessionModes), fixture: z.enum(simulationFixtures).optional(), simulation: simulationRequestSchema.optional(), targetId: id.optional(), projectContext: projectContextSchema.optional() }).strict().superRefine((value, context) => {
+  if (value.mode === "physical" && (value.fixture || value.simulation)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["simulation"], message: "Physical sessions cannot include simulation settings." });
+  if (value.fixture && value.simulation) context.addIssue({ code: z.ZodIssueCode.custom, path: ["fixture"], message: "Use either the legacy fixture field or the simulation specification, not both." });
+});
 export const problemSchema = z.object({ problem: z.string().trim().min(3).max(1000) }).strict();
 export const executeDecisionSchema = z.object({ expectedVersion: z.number().int().nonnegative(), setupConfirmed: z.boolean().optional(), setupDeclaration: z.string().trim().min(3).max(500).optional() }).strict();
 export const interventionSchema = z.object({ description: z.string().trim().min(3).max(500), recommendationId: id, safetyConfirmed: z.literal(true) }).strict();
@@ -68,6 +85,7 @@ const planSchema = z.object({
   bindingIds: z.array(id), phases: z.array(z.enum(["monitoring", "diagnostic", "verification"])).min(1), budgetClass: z.enum(["read", "timed_io", "bounded_output"]),
   requiresSetupConfirmation: z.boolean(), durationMs: z.number().int().nonnegative(), fixedParameters: z.record(z.union([z.number(), z.string(), z.boolean()])),
   measurements: z.array(z.object({ channel: id, unit: z.string(), description: z.string() }).strict()), limitations: z.array(z.string()), cleanup: z.string(),
+  series: z.array(z.object({ channel: id, unit: z.string(), description: z.string(), sampleIntervalUs: z.number().int().positive(), maximumSamples: z.number().int().positive().max(4096) }).strict()),
 }).strict();
 export const capabilityRegistrySchema = z.object({ schemaVersion: z.literal(1), registryVersion: id, digest: z.string().regex(/^[a-f0-9]{64}$/), boardIdentity: id, hardwareProfileId: id, plans: z.array(planSchema) }).strict().superRefine((value, context) => {
   const planIds = value.plans.map((plan) => plan.id);

@@ -14,7 +14,10 @@
     "firmware:build": "PATH=\".venv/bin:$PATH\" pio run -d firmware",
     "firmware:build:mpu6050": "PATH=\".venv/bin:$PATH\" pio run -d firmware -e esp32s3_mpu6050",
     "firmware:smoke:mpu6050": "tsx scripts/mpu6050-smoke.ts",
-    "firmware:test": "PATH=\".venv/bin:$PATH\" pio test -d firmware -e native"
+    "firmware:test": "PATH=\".venv/bin:$PATH\" pio test -d firmware -e native",
+    "simulation:capture:import": "tsx scripts/simulation-tools.ts import",
+    "simulation:calibrate": "tsx scripts/simulation-tools.ts calibrate",
+    "simulation:validate-models": "tsx scripts/simulation-tools.ts validate"
   },
   "dependencies": {
     "express": "^5.1.0",

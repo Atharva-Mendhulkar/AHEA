@@ -8,7 +8,7 @@ Transport is newline-delimited JSON at 115200 baud. Runtime requests contain an 
 
 The only commands are `hello`, `arm_session`, `execute_plan`, and `abort`. Unknown arguments are rejected. Callers cannot provide pins, waveform values, timing, ADC settings, I²C addresses/registers/bytes, or arbitrary bus operations.
 
-`hello` returns board, firmware, protocol, and hardware-profile identities plus the versioned capability registry and digest. Before arming, the backend compares every required plan's type, bindings, phases, budget class, duration, fixed parameters, measurement channels/units, and cleanup behavior with its reviewed definition. A missing or altered field fails closed.
+`hello` returns board, firmware, protocol, and hardware-profile identities plus the versioned capability registry and digest. Before arming, the backend compares every required plan's type, bindings, phases, budget class, duration, fixed parameters, measurement channels/units, bounded series descriptors, and cleanup behavior with its reviewed definition. A missing or altered field fails closed.
 
 A successful plan response includes:
 

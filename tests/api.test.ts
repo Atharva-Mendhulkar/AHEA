@@ -13,6 +13,11 @@ describe("HTTP API", () => {
   beforeAll(async () => { root = await mkdtemp(path.join(tmpdir(), "ahea-api-")); app = createApp(new Coordinator({ store: new JsonStore(root), agent: new TestAgent(), physicalEnabled: false })); });
   afterAll(async () => rm(root, { recursive: true, force: true }));
   it("lists the core and optional project contexts", async () => { const response = await request(app).get("/api/project-contexts").expect(200); expect(Object.keys(response.body)).toEqual(["loopback", "hc_sr04", "mpu6050", "dht11"]); });
+  it("publishes simulation models and rejects simulation settings in physical mode", async () => {
+    const catalog = await request(app).get("/api/simulation/catalog").expect(200); expect(catalog.body.models).toHaveLength(4); expect(catalog.body.models.every((entry: { calibration: { status: string } }) => entry.calibration.status === "model_only")).toBe(true);
+    await request(app).post("/api/sessions").send({ mode: "physical", simulation: { engine: "generated" } }).expect(400);
+    await request(app).post("/api/sessions").send({ mode: "simulation", simulation: { engine: "generated", scenario: { condition: "sensor_fault" } } }).expect(409);
+  });
   it("creates a context-bound loopback simulation and rejects raw input", async () => {
     const created = await request(app).post("/api/sessions").send({ mode: "simulation", fixture: "loopback_open" }).expect(201);
     expect(created.body.schemaVersion).toBe(3); expect(created.body.targetId).toBe("loopback-path"); expect(created.body.hardware.registry.plans).toHaveLength(7); expect(created.body.projectContextDigest).toMatch(/^[a-f0-9]{64}$/);

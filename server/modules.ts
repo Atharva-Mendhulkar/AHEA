@@ -3,7 +3,21 @@ import { isDeepStrictEqual } from "node:util";
 import type { CapabilityRegistry, DiagnosisSession, ExperimentDefinition, ProfileKind, ProjectContext, RegisteredPlan, TargetContext } from "../shared/domain.js";
 
 const loopbackLimit = "Consistency is measured against the ESP32-S3 timebase; this is not independent frequency calibration.";
-const plan = (value: RegisteredPlan): RegisteredPlan => value;
+function seriesFor(planId: string): RegisteredPlan["series"] {
+  const item = (channel: string, unit: string, sampleIntervalUs: number, maximumSamples: number) => ({ channel, unit, description: "Bounded samples observed during this registered plan.", sampleIntervalUs, maximumSamples });
+  if (planId.startsWith("loopback.")) {
+    const interval = planId.includes("static") ? 100000 : 125; const maximum = planId.includes("static") ? 3 : 512;
+    if (planId.includes("observe-destination")) return [item("destination_level","logic",interval,maximum)];
+    if (planId.includes("observe-source")) return [item("source_level","logic",interval,maximum)];
+    return [item("source_level","logic",interval,maximum),item("destination_level","logic",interval,maximum)];
+  }
+  if (planId.startsWith("hc-sr04.")) return [item("distance_cm","cm",60000,12),item("valid_echo","logic",60000,12)];
+  if (planId === "mpu6050.identity.v1") return [item("i2c_response","logic",20000,4)];
+  if (planId.startsWith("mpu6050.")) return ["accel_x","accel_y","accel_z"].map((channel)=>item(channel,"g",20000,50)).concat(["gyro_x","gyro_y","gyro_z"].map((channel)=>item(channel,"deg/s",20000,50)));
+  if (planId.startsWith("dht11.")) return [item("temperature","C",2000000,3),item("humidity","%",2000000,3),item("valid_frame","logic",2000000,3)];
+  return [];
+}
+const plan = (value: Omit<RegisteredPlan, "series"> & { series?: RegisteredPlan["series"] }): RegisteredPlan => ({ ...value, series: value.series ?? seriesFor(value.id) });
 const endpointMeasurements: RegisteredPlan["measurements"] = [
   { channel: "source_present", unit: "boolean", description: "Source signal presence." },
   { channel: "destination_present", unit: "boolean", description: "Destination signal presence." },
@@ -73,6 +87,7 @@ export function registryMatchesReviewedPlans(context: ProjectContext, registry: 
       durationMs: entry.durationMs,
       fixedParameters: entry.fixedParameters,
       measurements: entry.measurements.map(({ channel, unit }) => ({ channel, unit })).sort((a, b) => a.channel.localeCompare(b.channel)),
+      series: entry.series.map(({ channel, unit, sampleIntervalUs, maximumSamples }) => ({ channel, unit, sampleIntervalUs, maximumSamples })).sort((a, b) => a.channel.localeCompare(b.channel)),
       cleanup: entry.cleanup,
     });
     return isDeepStrictEqual(safetyCritical(advertised), safetyCritical(expected));
