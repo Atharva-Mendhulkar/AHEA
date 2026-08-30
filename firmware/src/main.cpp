@@ -88,7 +88,7 @@ void addPlan(JsonArray plans, const char* id, const char* capability, const char
   const String plan_id(id);
   if (plan_id.startsWith("loopback.")) { if (plan_id.indexOf("static") >= 0) { parameters["waveform"] = "low-high-low"; parameters["stepDurationMs"] = 100; } else { parameters["frequencyHz"] = plan_id.indexOf("500hz") >= 0 ? 500 : 1000; parameters["dutyPercent"] = 50; parameters["durationMs"] = duration_ms; } }
   else if (plan_id.startsWith("hc-sr04.")) { parameters["triggerPulseUs"] = 10; parameters["echoTimeoutUs"] = 30000; parameters["samples"] = plan_id == "hc-sr04.echo-timing.v1" ? 8 : 12; parameters["intervalMs"] = 60; }
-  else if (plan_id.startsWith("mpu6050.")) { parameters["address"] = "profile-owned"; parameters["busHz"] = ahea::profile::MPU6050_I2C_FREQUENCY_HZ; if (plan_id == "mpu6050.identity.v1") parameters["register"] = "WHO_AM_I"; else { parameters["samples"] = 50; parameters["sampleIntervalMs"] = 20; } }
+  else if (plan_id.startsWith("mpu6050.")) { parameters["address"] = "profile-owned"; if (plan_id == "mpu6050.identity.v1") parameters["register"] = "WHO_AM_I"; else { parameters["samples"] = 50; parameters["sampleIntervalMs"] = 20; } }
   else if (plan_id.startsWith("dht11.")) { if (plan_id == "dht11.valid-rate.v1") { parameters["samples"] = 3; parameters["intervalMs"] = 2000; } else parameters["minimumReadIntervalMs"] = 2000; }
   addPlanMeasurementDescriptors(plan_id, measurements);
 }

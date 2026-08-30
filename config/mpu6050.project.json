@@ -2,10 +2,10 @@
   "schemaVersion": 2,
   "project": { "id": "mpu6050-demo", "name": "MPU6050 diagnostics", "goal": "Characterize identity, stationary behavior, drift, and motion response." },
   "profile": { "kind": "mpu6050", "moduleId": "optional.mpu6050.v1" },
-  "hardwareProfileId": "esp32s3-mpu6050-safe-disabled-v1",
+  "hardwareProfileId": "esp32-devkit-mpu6050-reviewed-v1",
   "primaryTargetId": "imu",
-  "targets": [{ "id": "imu", "label": "MPU6050", "type": "mpu6050", "bindingIds": ["i2c_sda", "i2c_scl"], "i2c": { "address": "0x68", "pullupVolts": 3.3, "reviewed": false }, "expected": { "maximumStationaryNoiseG": 0.08, "maximumInvalidSampleRate": 0.05 }, "limitations": ["Motion is observed at the sensor only."] }],
+  "targets": [{ "id": "imu", "label": "MPU6050", "type": "mpu6050", "bindingIds": ["i2c_sda", "i2c_scl"], "i2c": { "address": "0x68", "pullupVolts": 3.3, "reviewed": true }, "expected": { "maximumStationaryNoiseG": 0.08, "maximumInvalidSampleRate": 0.05 }, "limitations": ["Motion is observed at the sensor only."] }],
   "allowedPlanIds": ["mpu6050.identity.v1", "mpu6050.stationary.v1", "mpu6050.motion-axis.v1"],
-  "procedures": { "setupChecklist": ["Verify SDA and SCL pull-ups terminate at 3.3 V."], "interventionSafety": ["Power down before changing I²C wiring."], "reference": { "kind": "baseline_characterization", "description": "No independent orientation reference is declared." } },
+  "procedures": { "setupChecklist": ["SDA GPIO21, SCL GPIO22; pull-ups verified at 3.3 V; AD0 tied to ground for address 0x68."], "interventionSafety": ["Power down before changing I²C wiring."], "reference": { "kind": "baseline_characterization", "description": "No independent orientation reference is declared." } },
   "constraints": { "maximumExperiments": 12, "maximumMonitoringReads": 40, "requiredVerificationPasses": 2, "physicalSourceRequiredForConfirmation": true, "humanOnlyIntervention": true }
 }
