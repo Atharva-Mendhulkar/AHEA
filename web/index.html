@@ -23,7 +23,7 @@
           <div class="card-header"><div><p class="eyebrow">New investigation</p><h2>Select a diagnostic profile</h2></div><span class="agent-orb idle" aria-hidden="true"></span></div>
           <div class="field-row">
             <label class="field">Profile<select id="profile"><option value="loopback">Core loopback</option><option value="hc_sr04">HC-SR04 · optional</option><option value="mpu6050">MPU6050 · optional</option><option value="dht11">DHT11 · optional</option></select><small>The core proof needs no external sensor.</small></label>
-            <label class="field">Evidence source<select id="mode"><option value="simulation">Simulation</option><option value="physical">Physical · reviewed profile required</option></select><small>Mode is immutable within a session.</small></label>
+            <label class="field">Evidence source<select id="mode"><option value="simulation">Simulation</option><option value="physical">Physical</option></select><small>Mode is immutable within a session.</small></label>
           </div>
           <div id="simulation-fields">
             <div class="field-row">
@@ -38,8 +38,8 @@
           </div>
           <label class="field">Reported problem<textarea id="problem" rows="3">The destination waveform is missing. Determine whether the protected path is open.</textarea></label>
           <details class="context-disclosure"><summary>Review immutable project context</summary><label class="field"><textarea id="project-context" class="context-editor" rows="13" spellcheck="false"></textarea><small>Only listed registered plans and fixed bindings are eligible.</small></label></details>
-          <div class="callout"><span class="callout-dot"></span><p><strong>Physical mode ships fail-closed.</strong> Flash a reviewed profile and explicitly confirm the fixture before execution.</p></div>
-          <button type="submit" class="button button-primary button-wide">Create evidence session</button>
+          <div class="callout"><span class="callout-dot"></span><p id="mode-guidance"><strong>Choose Simulation or Physical.</strong> AHEA will use the selected evidence source for the complete session.</p></div>
+          <button id="create-session" type="submit" class="button button-primary button-wide">Create evidence session</button>
         </form>
       </section>
 

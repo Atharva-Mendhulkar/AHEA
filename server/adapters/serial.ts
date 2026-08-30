@@ -64,7 +64,13 @@ export class SerialAdapter implements HardwareAdapter {
     return this.status;
   }
   async armSession(): Promise<void> { const response = await this.request("arm_session", {}); if (!response.ok) throw new Error(response.error?.message ?? "Firmware refused session arming."); }
-  declareIntervention(): void {}
+  async declareIntervention(): Promise<void> {
+    // A reviewed intervention requires power removal. Re-establish firmware
+    // identity and safety arming after the board has restarted.
+    this.status = undefined;
+    await this.preflight();
+    await this.armSession();
+  }
   async execute(experiment: ExperimentDefinition, execution: ExecuteContext): Promise<Observation> {
     if (!experiment.command || !experiment.planId) throw new Error("Experiment has no registered hardware plan.");
     if (!this.status) await this.preflight();

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch server/index.ts",
-    "start": "tsx server/index.ts",
+    "dev": "node --env-file-if-exists=.env --watch --import tsx server/index.ts",
+    "start": "node --env-file-if-exists=.env --import tsx server/index.ts",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",

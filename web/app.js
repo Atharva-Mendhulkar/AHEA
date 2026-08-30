@@ -28,6 +28,7 @@ function updateProfile() {
   $("#replay-capture").innerHTML = captures.length ? captures.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.id)} · ${entry.plans.length} plans</option>`).join("") : `<option value="">No imported captures</option>`;
   updateScenarioControl();
   $("#problem").value = kind === "loopback" ? "The destination waveform is missing. Determine whether the protected path is open." : `Characterize the ${context.project.name} profile and report whether the bounded evidence is normal or inconclusive.`;
+  updateModeGuidance();
 }
 
 function updateScenarioControl() {
@@ -38,6 +39,15 @@ function updateScenarioControl() {
 function updateSimulationEngine() {
   const simulation = $("#mode").value === "simulation"; const replay = $("#simulation-engine").value === "replay";
   $("#simulation-fields").classList.toggle("hidden", !simulation); $("#generated-fields").classList.toggle("hidden", replay); $("#seed-field").classList.toggle("hidden", replay); $("#replay-field").classList.toggle("hidden", !replay);
+  updateModeGuidance();
+}
+
+function updateModeGuidance() {
+  const physical = $("#mode").value === "physical";
+  $("#create-session").textContent = physical ? "Connect ESP32-S3 and create session" : "Create evidence session";
+  $("#mode-guidance").innerHTML = physical
+    ? "<strong>Physical mode.</strong> AHEA will connect to the configured ESP32-S3 and run registered hardware captures."
+    : "<strong>Simulation mode.</strong> Use generated or replayed evidence without controlling physical hardware.";
 }
 
 function copyFor(session) {

@@ -136,10 +136,14 @@ export class Coordinator {
     const recommendation = session.evidence.recommendations.find((entry) => entry.id === recommendationId);
     if (!recommendation) throw new DomainError("Recommendation is not valid for current evidence.", 409);
     if (!safetyConfirmed) throw new DomainError("The human operator must confirm the intervention safety procedure.", 409);
+    const adapter = this.adapters.get(id);
+    if (!adapter) throw new DomainError("Hardware adapter is unavailable after process restart; create a new session.", 503);
+    try { await adapter.declareIntervention(); }
+    catch (error) { throw new DomainError(error instanceof Error ? `Post-intervention hardware check failed: ${error.message}` : "Post-intervention hardware check failed.", 503); }
     session.lifecycle = "INTERVENTION";
     session.intervention = { description, recommendationId, safetyConfirmed: true, declaredAt: this.now().toISOString() };
     await this.addEvent(session, "intervention.declared", description, { recommendationId, safetyConfirmed: true });
-    this.adapters.get(id)?.declareIntervention();
+    if (session.mode === "physical") await this.addEvent(session, "hardware.revalidated", "Firmware identity was revalidated and the physical safety session was re-armed after intervention.");
     session.lifecycle = "VERIFYING"; session.phase = "verification"; session.agentState = "VERIFYING";
     session.evidence = deriveEvidence(session.observations, session.projectContext, session.targetId, true, session.mode);
     await this.selectNext(session); await this.commit(session); return session;

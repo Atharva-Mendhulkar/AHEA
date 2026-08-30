@@ -6,6 +6,6 @@ export interface HardwareAdapter {
   preflight(): Promise<HardwareStatus>;
   armSession?(): Promise<void>;
   execute(experiment: ExperimentDefinition, context: ExecuteContext): Promise<Observation>;
-  declareIntervention(): void;
+  declareIntervention(): void | Promise<void>;
   close(): Promise<void>;
 }
