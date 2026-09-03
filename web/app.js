@@ -2,6 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 const state = {
   contexts: {}, simulationCatalog: null, session: null, events: null,
   automation: { timer: null, ticker: null, decisionId: null, deadline: 0, paused: false, executing: false },
+  physicalAutomation: { running: false, error: null },
 };
 const simulationActionWindowMs = 4000;
 let graphFrame;
@@ -44,7 +45,7 @@ function updateSimulationEngine() {
 
 function updateModeGuidance() {
   const physical = $("#mode").value === "physical";
-  $("#create-session").textContent = physical ? "Connect ESP32-S3 and create session" : "Create evidence session";
+  $("#create-session").textContent = physical ? "Connect and run automatic diagnosis" : "Create evidence session";
   $("#mode-guidance").innerHTML = physical
     ? "<strong>Physical mode.</strong> AHEA will connect to the configured ESP32-S3 and run registered hardware captures."
     : "<strong>Simulation mode.</strong> Use generated or replayed evidence without controlling physical hardware.";
@@ -150,7 +151,9 @@ function render(session) {
   $("#plan-list").innerHTML = session.hardware.registry.plans.map((entry) => `<div class="plan-row"><span>${escapeHtml(entry.label)}</span><code>${escapeHtml(entry.id)}</code></div>`).join("");
   $("#event-count").textContent = session.timeline.length; $("#timeline").innerHTML = [...session.timeline].reverse().map((event) => `<div class="timeline-item"><time>${new Date(event.at).toLocaleTimeString()}</time><div><strong>${escapeHtml(event.type.replaceAll(".", " "))}</strong><p>${escapeHtml(event.summary)}</p></div></div>`).join("");
   const pendingPrompt = session.pendingDecision?.experiment.operatorPrompt || "Confirm the declared setup before capture."; $("#operator-prompt").textContent = pendingPrompt; $("#confirmation-label").textContent = session.pendingDecision?.experiment.confirmationLabel || "Fixture matches the declared setup"; $("#simulation-prompt-note").hidden = session.mode !== "simulation";
-  $("#start-investigation").classList.toggle("hidden", session.mode === "simulation" || !(session.lifecycle === "INVESTIGATING" && session.agentState === "IDLE")); $("#execute-action").classList.toggle("hidden", !session.pendingDecision || session.agentState === "IDLE"); $("#physical-execution-controls").classList.toggle("hidden", session.mode === "simulation"); $("#auto-run-status").classList.toggle("hidden", session.mode !== "simulation"); $("#auto-run-toggle").classList.toggle("hidden", session.mode !== "simulation"); $("#intervention-action").classList.toggle("hidden", session.lifecycle !== "DIAGNOSIS_READY"); $("#download-report").disabled = session.observations.length === 0; $("#estop").disabled = terminal(session) || session.lifecycle === "READY";
+  const physicalAutomaticAction = session.mode === "physical" && Boolean(session.pendingDecision) && !terminal(session) && session.lifecycle !== "DIAGNOSIS_READY" && !state.physicalAutomation.running;
+  $("#start-investigation").textContent = session.phase === "verification" ? "Run automatic verification" : session.agentState === "IDLE" ? "Start automatic diagnosis" : "Resume automatic diagnosis";
+  $("#start-investigation").classList.toggle("hidden", !physicalAutomaticAction); $("#execute-action").classList.toggle("hidden", session.mode === "physical" || !session.pendingDecision || session.agentState === "IDLE"); $("#physical-execution-controls").classList.toggle("hidden", session.mode === "simulation"); $("#auto-run-status").classList.toggle("hidden", session.mode !== "simulation"); $("#auto-run-toggle").classList.toggle("hidden", session.mode !== "simulation"); $("#intervention-action").classList.toggle("hidden", session.lifecycle !== "DIAGNOSIS_READY"); $("#download-report").disabled = session.observations.length === 0; $("#estop").disabled = terminal(session) || session.lifecycle === "READY";
   renderMeasurements(session); drawGraph(session); syncSimulationAutomation(session);
 }
 
@@ -163,9 +166,30 @@ async function createSession(event) {
     const session = await api("/api/sessions", { method: "POST", body: JSON.stringify({ mode, simulation, projectContext: context }) }); let submitted = await api(`/api/sessions/${session.id}/problem`, { method: "POST", body: JSON.stringify({ problem: $("#problem").value }) });
     if (submitted.mode === "simulation") submitted = await api(`/api/sessions/${submitted.id}/investigation/start`, { method: "POST", body: "{}" });
     render(submitted); $("#setup-confirmed").checked = false; connectEvents(submitted.id);
+    if (submitted.mode === "physical") await runPhysicalSequence(submitted);
   } catch (error) { toast(error.message); }
 }
-async function startInvestigation() { try { render(await api(`/api/sessions/${state.session.id}/investigation/start`, { method: "POST", body: "{}" })); } catch (error) { toast(error.message); } }
+async function runPhysicalSequence(initial = state.session) {
+  if (!initial || initial.mode !== "physical" || state.physicalAutomation.running) return;
+  state.physicalAutomation.running = true; state.physicalAutomation.error = null; let current = initial; render(current);
+  try {
+    if (current.lifecycle === "INVESTIGATING" && current.agentState === "IDLE") {
+      current = await api(`/api/sessions/${current.id}/investigation/start`, { method: "POST", body: "{}" }); render(current);
+    }
+    let guard = 0;
+    while (current.pendingDecision && !terminal(current) && current.lifecycle !== "DIAGNOSIS_READY" && guard < current.projectContext.constraints.maximumExperiments) {
+      const pending = current.pendingDecision; const prompt = pending.experiment.operatorPrompt || "Keep the fixture unchanged during automatic capture.";
+      current = await api(`/api/sessions/${current.id}/decisions/${pending.id}/execute`, { method: "POST", body: JSON.stringify({ expectedVersion: current.version, setupConfirmed: true, setupDeclaration: `Operator authorized the automatic physical sequence. ${prompt}` }) });
+      render(current); guard += 1;
+    }
+    if (guard >= current.projectContext.constraints.maximumExperiments && current.pendingDecision) throw new Error("Automatic experiment budget was exhausted.");
+    if (current.lifecycle === "DIAGNOSIS_READY") toast("Intervention needed: follow the repair instruction, then declare the change.");
+    else if (current.lifecycle === "CONFIRMED") toast("Repair confirmed by two automatic verification captures.");
+    else if (current.lifecycle === "FAILED_VERIFICATION") toast("The fault persisted after automatic verification.");
+  } catch (error) { state.physicalAutomation.error = error.message; toast(error.message); }
+  finally { state.physicalAutomation.running = false; if (state.session) render(state.session); }
+}
+async function startInvestigation() { if (state.session?.mode === "physical") return runPhysicalSequence(); try { render(await api(`/api/sessions/${state.session.id}/investigation/start`, { method: "POST", body: "{}" })); } catch (error) { toast(error.message); } }
 async function executeSelected({ automatic = false, decisionId } = {}) {
   const pending = state.session?.pendingDecision; if (!pending || (decisionId && pending.id !== decisionId) || state.automation.executing) return;
   const simulationAutomatic = automatic && state.session.mode === "simulation";
@@ -179,7 +203,7 @@ async function executeSelected({ automatic = false, decisionId } = {}) {
     state.automation.executing = false; if (simulationAutomatic) state.automation.paused = true; updateAutomationStatus(); toast(error.message);
   }
 }
-async function declareIntervention() { try { const recommendation = state.session.evidence.recommendations[0]; if (!recommendation) return; render(await api(`/api/sessions/${state.session.id}/interventions`, { method: "POST", body: JSON.stringify({ description: $("#intervention").value, recommendationId: recommendation.id, safetyConfirmed: $("#safety-confirmed").checked }) })); } catch (error) { toast(error.message); } }
+async function declareIntervention() { try { const recommendation = state.session.evidence.recommendations[0]; if (!recommendation) return; const updated = await api(`/api/sessions/${state.session.id}/interventions`, { method: "POST", body: JSON.stringify({ description: $("#intervention").value, recommendationId: recommendation.id, safetyConfirmed: $("#safety-confirmed").checked }) }); render(updated); if (updated.mode === "physical") await runPhysicalSequence(updated); } catch (error) { toast(error.message); } }
 async function stopSession() { clearAutomationTimers(); state.automation.paused = true; try { render(await api(`/api/sessions/${state.session.id}/emergency-stop`, { method: "POST", body: "{}" })); } catch (error) { toast(error.message); } }
 async function downloadReport() { try { const report = await api(`/api/sessions/${state.session.id}/report`); const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" })); link.download = `ahea-${state.session.id}.json`; link.click(); URL.revokeObjectURL(link.href); } catch (error) { toast(error.message); } }
 function connectEvents(id) { state.events?.close(); state.events = new EventSource(`/api/sessions/${id}/events`); state.events.addEventListener("snapshot", (event) => render(JSON.parse(event.data))); state.events.addEventListener("timeline", async () => { try { render(await api(`/api/sessions/${id}`)); } catch {} }); }
